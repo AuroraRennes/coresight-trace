@@ -259,14 +259,33 @@ int enable_trace(const struct board *board, struct cs_devices_t *devices)
   if (devices->trace_sinks[0]) {
     if (cs_sink_etf_setup(devices->trace_sinks[0], CS_ETB_RAM_MODE_HW_FIFO) !=
         0) {
-      fprintf(stderr, "Failed to setup ETF\n");
+      fprintf(stderr, "Failed to setup ETF 1\n");
       return -1;
     }
     if (cs_sink_enable(devices->trace_sinks[0]) != 0) {
-      fprintf(stderr, "Failed to enable ETF\n");
+      fprintf(stderr, "Failed to enable ETF 1\n");
       return -1;
     }
+    if (cs_sink_etf_setup(devices->trace_sinks[1], CS_ETB_RAM_MODE_HW_FIFO) !=
+        0) {
+      fprintf(stderr, "Failed to setup ETF 2\n");
+      return -1;
+    }
+    if (cs_sink_enable(devices->trace_sinks[1]) != 0) {
+      fprintf(stderr, "Failed to enable ETF 2\n");
+      return -1;
+    }
+
   }
+
+    if(cs_tmc_hw_fifo_enable(devices->trace_sinks[0], /*bufwm=*/0x0) != 0){
+	        printf("CSDEMO: Could not enable sinks as hw fifo 1/2 - not running demo\n");
+		      return -1;
+		          }
+  if(cs_tmc_hw_fifo_enable(devices->trace_sinks[1], /*bufwm=*/0x0) != 0){
+	        printf("CSDEMO: Could not enable sinks as hw fifo 2/2 - not running demo\n");
+		      return -1;
+		          }
 
   for (i = 0; i < board->n_cpu; ++i) {
     cs_trace_enable(devices->ptm[i]);
