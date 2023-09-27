@@ -1,6 +1,6 @@
 [submodule "CSAL"]
 	path = CSAL
-	url = https://github.com/RICSecLab/CSAL.git
+	url = git@github.com:AuroraRennes/CSAL.git
 [submodule "coresight-decoder"]
 	path = coresight-decoder
 	url = https://github.com/RICSecLab/coresight-decoder.git
