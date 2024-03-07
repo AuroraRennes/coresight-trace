@@ -195,6 +195,7 @@ static int do_registration_zcu104(struct cs_devices_t *devices)
   /* devices->tsgen = tsgen; */
   for (i = 0; i < 4; i++) {
     devices->cpu_id[i] = cpu_id[i];
+    devices->cpu_id[i] = 0xD03;
   }
 
   return 0;

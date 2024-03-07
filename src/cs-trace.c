@@ -64,16 +64,22 @@ void parent(pid_t pid, int *child_status)
 
   waitpid(pid, &wstatus, 0);
   if (WIFSTOPPED(wstatus) && WSTOPSIG(wstatus) == PTRACE_EVENT_VFORK_DONE) {
+    printf("Initializing trace\n");
     init_trace(getpid(), pid);
+    printf("Starting trace\n");
     start_trace(pid, true);
+    printf("Sending CONT signal to child\n");
     ptrace(PTRACE_CONT, pid, NULL, NULL);
   }
 
   while (1) {
     waitpid(pid, &wstatus, 0);
     if (WIFEXITED(wstatus)) {
+      printf("Child exited, , wstatus=%d\n", wstatus);
       stop_trace(true);
+      printf("Finalizing trace\n");
       fini_trace();
+      printf("Done\n");
       break;
     } else if (WIFSTOPPED(wstatus) && WSTOPSIG(wstatus) == SIGSTOP) {
       trace_suspend_resume_callback();

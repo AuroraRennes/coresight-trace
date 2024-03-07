@@ -207,7 +207,7 @@ static int trace_sink_polling(unsigned long decoding_threshold)
 
       /* Decode trace during the process is running. */
       if ((ret = decode_trace()) < 0) {
-        fprintf(stderr, "decode_trace() failed\n");
+        fprintf(stderr, "decode_trace() 1 failed\n");
         goto exit;
       }
     }
@@ -222,7 +222,7 @@ killed:
 
   fetch_trace();
   if ((ret = decode_trace()) < 0) {
-    fprintf(stderr, "decode_trace() failed\n");
+    fprintf(stderr, "decode_trace() 2 failed\n");
     goto exit;
   }
 
@@ -614,7 +614,7 @@ int decode_trace(void)
 
   buf = decoded_trace_buf;
   buf_size = (size_t)((char *)trace_buf_ptr - (char *)buf);
-
+  fprintf(stderr, "run_decoder(buf=%p, buf_size=0x%lx)\n", buf, buf_size);
   ret = run_decoder(buf, buf_size);
   if (ret < 0) {
     goto exit;

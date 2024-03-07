@@ -1,0 +1,4 @@
+#!/bin/bash
+CMD="./coresight-decoder/processor $(cat decoderargs.txt)"
+echo $CMD
+$CMD
