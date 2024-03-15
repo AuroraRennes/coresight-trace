@@ -1,0 +1,1 @@
+ /home/aurora/tmp2/coresight-trace/msc-tests/240315_tests/cstrace.bin 0x10 1 /home/aurora/tmp2/coresight-trace/msc-tests/240315_tests/test3 0xaaaaaaaa0000 0xaaaaaaaa1000
