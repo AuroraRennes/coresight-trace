@@ -1,0 +1,611 @@
+Initializing trace
+INFO: [0xfffff7fbe000-0xfffff7fe5000] will not be traced
+INFO: [0xfffff7ffb000-0xfffff7ffc000] will not be traced
+CSDEMO: Registering ZCU104 CoreSight Devices...
+00FE900000: type=13 O TIMESTAMP
+00FE910000: 2.1 908 00000033 00/0F type= 4 - LINK [FUNNEL: 3 in ports]
+00FE920000: 2.1 908 00000034 00/0F type= 4 - LINK [FUNNEL: 4 in ports]
+00FE930000: 2.1 908 00000034 00/0F type= 4 - LINK [FUNNEL: 4 in ports]
+00FE940000: 2.3 961 00000380 00/0F type= 6 - LINK SINK BUFFER(4K) [TMC: ETF configuration]
+00FE950000: 2.3 961 00000380 00/0F type= 6 - LINK SINK BUFFER(8K) [TMC: ETF configuration]
+00FE960000: 2.2 909 00000002 00/0F type= 5 - LINK [REPLICATOR: 2 out ports]
+00FE970000: 1.2 961 00001A40 00/0F type= 7 - SINK BUFFER(ETR r/w size: 512K) [TMC: ETR configuration]
+00FE980000: 1.1 912 000000A0 00/0F type= 8 - SINK PORT [TPIU]
+00FE990000: 4.1 906 00040800 00/0F type=10 - CTI
+00FE9A0000: 4.1 906 00040800 00/0F type=10 - CTI
+00FE9B0000: 4.1 906 00040800 00/0F type=10 - CTI
+00FE9C0000: 3.6 963 00010000 00/0F type= 3 - SOURCE SWSTIM(65536) [STM ext ports only, 64-bit, 128 masters]
+00FE9D0000: 0.0 F21 00000000 00/01 type= 0 -
+** skipping excluded device at 00FE9E0000
+** skipping excluded device at 00FE9F0000
+** skipping excluded device at 00FEBE0000
+00FEC10000: 5.1 D03 00000003 00/FF type=11 - CPU 0.0 DEBUG v8 (6 bkpt) (4 wpt) (2 ctx_cmp) sample: PCSR, CIDSR, VIDSR; Secure, running auth=FF
+00FEC20000: 4.1 9A8 01040800 00/0F type=10 - CTI
+00FEC30000: 6.1 9D3 00000000 00/00 type=12 - CPU 0.0 PMU (6 counters) auth=CC
+00FEC40000: 3.1 95D 00000000 02/0F type= 1 - CPU 0.0 SOURCE ETMv4.0
+00FED10000: 5.1 D03 00000003 00/FF type=11 - CPU 0.1 DEBUG v8 (6 bkpt) (4 wpt) (2 ctx_cmp) sample: PCSR, CIDSR, VIDSR; Secure, running auth=FF
+00FED20000: 4.1 9A8 01040800 00/0F type=10 - CTI
+00FED30000: 6.1 9D3 00000000 00/00 type=12 - CPU 0.1 PMU (6 counters) auth=CC
+00FED40000: 3.1 95D 00000000 02/0F type= 1 - CPU 0.1 SOURCE ETMv4.0
+00FEE10000: 5.1 D03 00000003 00/FF type=11 - CPU 0.2 DEBUG v8 (6 bkpt) (4 wpt) (2 ctx_cmp) sample: PCSR, CIDSR, VIDSR; Secure, running auth=FF
+00FEE20000: 4.1 9A8 01040800 00/0F type=10 - CTI
+00FEE30000: 6.1 9D3 00000000 00/00 type=12 - CPU 0.2 PMU (6 counters) auth=CC
+00FEE40000: 3.1 95D 00000000 02/0F type= 1 - CPU 0.2 SOURCE ETMv4.0
+00FEF10000: 5.1 D03 00000003 00/FF type=11 - CPU 0.3 DEBUG v8 (6 bkpt) (4 wpt) (2 ctx_cmp) sample: PCSR, CIDSR, VIDSR; Secure, running auth=FF
+00FEF20000: 4.1 9A8 01040800 00/0F type=10 - CTI
+00FEF30000: 6.1 9D3 00000000 00/00 type=12 - CPU 0.3 PMU (6 counters) auth=CC
+00FEF40000: 3.1 95D 00000000 02/0F type= 1 - CPU 0.3 SOURCE ETMv4.0
+CSDEMO: Registering CPU Affinities...
+CSDEMO: Registering trace-bus connections...
+CSREG: Registration complete.
+Starting trace
+** 00FEC40000: write 010 (CS_ETMV4_CONFIGR) = 00000000 now 00000001
+** 00FEC40000: write 2A0 (CS_ETMV4_SSCSR(i)) = 00000000 now 00000001
+** 00FEC40000: write 02C (CS_ETMV4_STALLCTLR) = 00002000 now 00000000
+** 00FED40000: write 010 (CS_ETMV4_CONFIGR) = 00000000 now 00000001
+** 00FED40000: write 2A0 (CS_ETMV4_SSCSR(i)) = 00000000 now 00000001
+** 00FED40000: write 02C (CS_ETMV4_STALLCTLR) = 00002000 now 00000000
+** 00FEE40000: write 010 (CS_ETMV4_CONFIGR) = 00000000 now 00000001
+** 00FEE40000: write 2A0 (CS_ETMV4_SSCSR(i)) = 00000000 now 00000001
+** 00FEE40000: write 02C (CS_ETMV4_STALLCTLR) = 00002000 now 00000000
+** 00FEF40000: write 010 (CS_ETMV4_CONFIGR) = 00000000 now 00000001
+** 00FEF40000: write 2A0 (CS_ETMV4_SSCSR(i)) = 00000000 now 00000001
+** 00FEF40000: write 02C (CS_ETMV4_STALLCTLR) = 00002000 now 00000000
+** 00FEC40000: write 010 (CS_ETMV4_CONFIGR) = 00000141 now 00000041
+** 00FEC40000: write 480 (CS_ETMV4_ACATR(i)) = 00006704 now 00006304
+** 00FEC40000: write 488 (CS_ETMV4_ACATR(i)) = 00006704 now 00006304
+ETMv4 static configuration:
+	IDR0 = 28000EA1
+	IDR1 = 4100F404
+	IDR2 = 00000488
+	IDR3 = 0D7B0004
+	IDR4 = 11170004
+	IDR5 = 28C7081E
+ETMv4 dynamic configuration:
+
+===General configuration===
+	TRACEIDR = 00000010
+	CONFIGR = 00000041
+		.instp0 = 0 (Trace LD & ST instructions as P0 off)
+		.bb     = 0 (Branch Broadcast disabled)
+		.cci    = 0 (Cycle Count instruction trace disabled)
+		.cid    = 1 (Context ID trace enabled)
+		.vmid   = 0 (VMID trace disabled)
+		.cond   = 0 (Conditional instuction trace: disabled)
+		.ts     = 0 (Global timestamp trace disabled)
+		.rs     = 0 (Return Stack disabled)
+		.qe     = 0 (Q element trace: disabled
+		.da     = 0 (Data address trace disabled)
+		.dv     = 0 (Data value trace disabled)
+	STALLCTLR = 00000000
+	SYNCPR = 00
+	CCCTLR = 000 (Cycle Count control)
+	BBCTLR = 000 (Branch Broadcast control)
+	QCTLR not implemented.
+
+===Event Select===
+	EVENTCTL0R = 00000000
+		Event0=[Single]: NEVER
+		Event1=[Single]: NEVER
+		Event2=[Single]: NEVER
+		Event3=[Single]: NEVER
+	EVENTCTL1R = 00000000
+		.insten = 0: Instr Trace event element on events - disabled
+		.dataen = 0: Data trace element disabled
+		.atb = 0: ATB trace trigger disabled
+	TSCTLR = 00 (Event = [Single]: NEVER)
+
+===Trace Enables===
+	VICTLR = 00000201 (ViewInst Event = [Single]: ALWAYS)
+	.exlevel_s = 0, ELs off:[none]
+	.exlevel_ns = 0, ELs off:[none]
+	.ssstatus = 1 (StartStop = started)
+	VIIECTLR = 00000001
+	VISSCTLR = 00000000
+	VIPCSSCTLR = 00000000
+	Data trace not implemented
+
+===Sequencer===
+	SEQEVR0 = 00000000, (Event-F 0->1 = [Single]: NEVER; Event-B 0<-1 = [Single]: NEVER)
+	SEQEVR1 = 00000000, (Event-F 1->2 = [Single]: NEVER; Event-B 1<-2 = [Single]: NEVER)
+	SEQEVR2 = 00000000, (Event-F 2->3 = [Single]: NEVER; Event-B 2<-3 = [Single]: NEVER)
+	SEQRSTEVR = 00, (Seqencer Reset Event = [Single]: NEVER)
+	SEQSTR = 0
+
+===Counters (2)===
+	CNTCTLR0 = 00000000, (Count Event = [Single]: NEVER; Reload Event = [Single]: NEVER)
+	CNTRLDVR0 = 0000 (Reload Value)
+	CNTVR0 = 0000 (Counter Value)
+	CNTCTLR1 = 00000000, (Count Event = [Single]: NEVER; Reload Event = [Single]: NEVER)
+	CNTRLDVR1 = 0000 (Reload Value)
+	CNTVR1 = 0000 (Counter Value)
+
+===Resource Selection Registers (16) ===
+	RSCTLR0 => Fixed resource = FALSE / NEVER
+	RSCTLR1 => Fixed resource = TRUE  / ALWAYS
+	RSCTLR2 = 00000000 ([0:0000 : no resource selected ] )
+	RSCTLR3 = 00000000 ([0:0000 : no resource selected ] )
+	RSCTLR4 = 00000000 ([0:0000 : no resource selected ] )
+	RSCTLR5 = 00000000 ([0:0000 : no resource selected ] )
+	RSCTLR6 = 00000000 ([0:0000 : no resource selected ] )
+	RSCTLR7 = 00000000 ([0:0000 : no resource selected ] )
+	RSCTLR8 = 00000000 ([0:0000 : no resource selected ] )
+	RSCTLR9 = 00000000 ([0:0000 : no resource selected ] )
+	RSCTLR10 = 00000000 ([0:0000 : no resource selected ] )
+	RSCTLR11 = 00000000 ([0:0000 : no resource selected ] )
+	RSCTLR12 = 00000000 ([0:0000 : no resource selected ] )
+	RSCTLR13 = 00000000 ([0:0000 : no resource selected ] )
+	RSCTLR14 = 00000000 ([0:0000 : no resource selected ] )
+	RSCTLR15 = 00000000 ([0:0000 : no resource selected ] )
+
+=== External inputs===
+	EXTINSELR = 00000000
+
+===Single Shot Comparators (1)===
+	SSCCR0 = 00000000, (ARPair=00 [none], ACSingle=0000 [none] RST=0)
+	SSCSR0 = 00000001, (Status=0, Support: PC:N; DV:N, DA:N, INST:Y)
+	SSPCOCR0 = 00000000
+
+===Address Comparators (8)===
+	ACVR0 = 0000AAAAAAAA0000
+	ACATR0 = 00006304, (Type:I Addr, Context: CXTID Ctxt-comp 0,Excl ELs_S[EL0 EL1 ], Excl ELs_NS[EL1 EL2 ],Data: No Data Value Comp)
+	ACVR1 = 0000AAAAAAAA1000
+	ACATR1 = 00006304, (Type:I Addr, Context: CXTID Ctxt-comp 0,Excl ELs_S[EL0 EL1 ], Excl ELs_NS[EL1 EL2 ],Data: No Data Value Comp)
+	ACVR2 = 0000000000000000
+	ACATR2 = 00000000, (Type:I Addr, Context: None Ctxt-comp 0,Excl ELs_S[none], Excl ELs_NS[none],Data: No Data Value Comp)
+	ACVR3 = 0000000000000000
+	ACATR3 = 00000000, (Type:I Addr, Context: None Ctxt-comp 0,Excl ELs_S[none], Excl ELs_NS[none],Data: No Data Value Comp)
+	ACVR4 = 0000000000000000
+	ACATR4 = 00000000, (Type:I Addr, Context: None Ctxt-comp 0,Excl ELs_S[none], Excl ELs_NS[none],Data: No Data Value Comp)
+	ACVR5 = 0000000000000000
+	ACATR5 = 00000000, (Type:I Addr, Context: None Ctxt-comp 0,Excl ELs_S[none], Excl ELs_NS[none],Data: No Data Value Comp)
+	ACVR6 = 0000000000000000
+	ACATR6 = 00000000, (Type:I Addr, Context: None Ctxt-comp 0,Excl ELs_S[none], Excl ELs_NS[none],Data: No Data Value Comp)
+	ACVR7 = 0000000000000000
+	ACATR7 = 00000000, (Type:I Addr, Context: None Ctxt-comp 0,Excl ELs_S[none], Excl ELs_NS[none],Data: No Data Value Comp)
+
+===Data Value Comparators not implemented===
+
+===Context ID Comparators (1)===
+	CIDCVR0 = 0000E91C
+	CIDCCTLR0 = 00000000, (Byte Mask Comps 0-3)
+	CIDCCTLR1 = 00000000, (Byte Mask Comps 4-7)
+
+===VMID Comparators (1)===
+	VMIDCVR0 = 00
+** 00FED40000: write 010 (CS_ETMV4_CONFIGR) = 00000141 now 00000041
+** 00FED40000: write 480 (CS_ETMV4_ACATR(i)) = 00006704 now 00006304
+** 00FED40000: write 488 (CS_ETMV4_ACATR(i)) = 00006704 now 00006304
+ETMv4 static configuration:
+	IDR0 = 28000EA1
+	IDR1 = 4100F404
+	IDR2 = 00000488
+	IDR3 = 0D7B0004
+	IDR4 = 11170004
+	IDR5 = 28C7081E
+ETMv4 dynamic configuration:
+
+===General configuration===
+	TRACEIDR = 00000011
+	CONFIGR = 00000041
+		.instp0 = 0 (Trace LD & ST instructions as P0 off)
+		.bb     = 0 (Branch Broadcast disabled)
+		.cci    = 0 (Cycle Count instruction trace disabled)
+		.cid    = 1 (Context ID trace enabled)
+		.vmid   = 0 (VMID trace disabled)
+		.cond   = 0 (Conditional instuction trace: disabled)
+		.ts     = 0 (Global timestamp trace disabled)
+		.rs     = 0 (Return Stack disabled)
+		.qe     = 0 (Q element trace: disabled
+		.da     = 0 (Data address trace disabled)
+		.dv     = 0 (Data value trace disabled)
+	STALLCTLR = 00000000
+	SYNCPR = 00
+	CCCTLR = 000 (Cycle Count control)
+	BBCTLR = 000 (Branch Broadcast control)
+	QCTLR not implemented.
+
+===Event Select===
+	EVENTCTL0R = 00000000
+		Event0=[Single]: NEVER
+		Event1=[Single]: NEVER
+		Event2=[Single]: NEVER
+		Event3=[Single]: NEVER
+	EVENTCTL1R = 00000000
+		.insten = 0: Instr Trace event element on events - disabled
+		.dataen = 0: Data trace element disabled
+		.atb = 0: ATB trace trigger disabled
+	TSCTLR = 00 (Event = [Single]: NEVER)
+
+===Trace Enables===
+	VICTLR = 00000201 (ViewInst Event = [Single]: ALWAYS)
+	.exlevel_s = 0, ELs off:[none]
+	.exlevel_ns = 0, ELs off:[none]
+	.ssstatus = 1 (StartStop = started)
+	VIIECTLR = 00000001
+	VISSCTLR = 00000000
+	VIPCSSCTLR = 00000000
+	Data trace not implemented
+
+===Sequencer===
+	SEQEVR0 = 00000000, (Event-F 0->1 = [Single]: NEVER; Event-B 0<-1 = [Single]: NEVER)
+	SEQEVR1 = 00000000, (Event-F 1->2 = [Single]: NEVER; Event-B 1<-2 = [Single]: NEVER)
+	SEQEVR2 = 00000000, (Event-F 2->3 = [Single]: NEVER; Event-B 2<-3 = [Single]: NEVER)
+	SEQRSTEVR = 00, (Seqencer Reset Event = [Single]: NEVER)
+	SEQSTR = 0
+
+===Counters (2)===
+	CNTCTLR0 = 00000000, (Count Event = [Single]: NEVER; Reload Event = [Single]: NEVER)
+	CNTRLDVR0 = 0000 (Reload Value)
+	CNTVR0 = 0000 (Counter Value)
+	CNTCTLR1 = 00000000, (Count Event = [Single]: NEVER; Reload Event = [Single]: NEVER)
+	CNTRLDVR1 = 0000 (Reload Value)
+	CNTVR1 = 0000 (Counter Value)
+
+===Resource Selection Registers (16) ===
+	RSCTLR0 => Fixed resource = FALSE / NEVER
+	RSCTLR1 => Fixed resource = TRUE  / ALWAYS
+	RSCTLR2 = 00000000 ([0:0000 : no resource selected ] )
+	RSCTLR3 = 00000000 ([0:0000 : no resource selected ] )
+	RSCTLR4 = 00000000 ([0:0000 : no resource selected ] )
+	RSCTLR5 = 00000000 ([0:0000 : no resource selected ] )
+	RSCTLR6 = 00000000 ([0:0000 : no resource selected ] )
+	RSCTLR7 = 00000000 ([0:0000 : no resource selected ] )
+	RSCTLR8 = 00000000 ([0:0000 : no resource selected ] )
+	RSCTLR9 = 00000000 ([0:0000 : no resource selected ] )
+	RSCTLR10 = 00000000 ([0:0000 : no resource selected ] )
+	RSCTLR11 = 00000000 ([0:0000 : no resource selected ] )
+	RSCTLR12 = 00000000 ([0:0000 : no resource selected ] )
+	RSCTLR13 = 00000000 ([0:0000 : no resource selected ] )
+	RSCTLR14 = 00000000 ([0:0000 : no resource selected ] )
+	RSCTLR15 = 00000000 ([0:0000 : no resource selected ] )
+
+=== External inputs===
+	EXTINSELR = 00000000
+
+===Single Shot Comparators (1)===
+	SSCCR0 = 00000000, (ARPair=00 [none], ACSingle=0000 [none] RST=0)
+	SSCSR0 = 00000001, (Status=0, Support: PC:N; DV:N, DA:N, INST:Y)
+	SSPCOCR0 = 00000000
+
+===Address Comparators (8)===
+	ACVR0 = 0000AAAAAAAA0000
+	ACATR0 = 00006304, (Type:I Addr, Context: CXTID Ctxt-comp 0,Excl ELs_S[EL0 EL1 ], Excl ELs_NS[EL1 EL2 ],Data: No Data Value Comp)
+	ACVR1 = 0000AAAAAAAA1000
+	ACATR1 = 00006304, (Type:I Addr, Context: CXTID Ctxt-comp 0,Excl ELs_S[EL0 EL1 ], Excl ELs_NS[EL1 EL2 ],Data: No Data Value Comp)
+	ACVR2 = 0000000000000000
+	ACATR2 = 00000000, (Type:I Addr, Context: None Ctxt-comp 0,Excl ELs_S[none], Excl ELs_NS[none],Data: No Data Value Comp)
+	ACVR3 = 0000000000000000
+	ACATR3 = 00000000, (Type:I Addr, Context: None Ctxt-comp 0,Excl ELs_S[none], Excl ELs_NS[none],Data: No Data Value Comp)
+	ACVR4 = 0000000000000000
+	ACATR4 = 00000000, (Type:I Addr, Context: None Ctxt-comp 0,Excl ELs_S[none], Excl ELs_NS[none],Data: No Data Value Comp)
+	ACVR5 = 0000000000000000
+	ACATR5 = 00000000, (Type:I Addr, Context: None Ctxt-comp 0,Excl ELs_S[none], Excl ELs_NS[none],Data: No Data Value Comp)
+	ACVR6 = 0000000000000000
+	ACATR6 = 00000000, (Type:I Addr, Context: None Ctxt-comp 0,Excl ELs_S[none], Excl ELs_NS[none],Data: No Data Value Comp)
+	ACVR7 = 0000000000000000
+	ACATR7 = 00000000, (Type:I Addr, Context: None Ctxt-comp 0,Excl ELs_S[none], Excl ELs_NS[none],Data: No Data Value Comp)
+
+===Data Value Comparators not implemented===
+
+===Context ID Comparators (1)===
+	CIDCVR0 = 0000E91C
+	CIDCCTLR0 = 00000000, (Byte Mask Comps 0-3)
+	CIDCCTLR1 = 00000000, (Byte Mask Comps 4-7)
+
+===VMID Comparators (1)===
+	VMIDCVR0 = 00
+** 00FEE40000: write 010 (CS_ETMV4_CONFIGR) = 00000141 now 00000041
+** 00FEE40000: write 480 (CS_ETMV4_ACATR(i)) = 00006704 now 00006304
+** 00FEE40000: write 488 (CS_ETMV4_ACATR(i)) = 00006704 now 00006304
+ETMv4 static configuration:
+	IDR0 = 28000EA1
+	IDR1 = 4100F404
+	IDR2 = 00000488
+	IDR3 = 0D7B0004
+	IDR4 = 11170004
+	IDR5 = 28C7081E
+ETMv4 dynamic configuration:
+
+===General configuration===
+	TRACEIDR = 00000012
+	CONFIGR = 00000041
+		.instp0 = 0 (Trace LD & ST instructions as P0 off)
+		.bb     = 0 (Branch Broadcast disabled)
+		.cci    = 0 (Cycle Count instruction trace disabled)
+		.cid    = 1 (Context ID trace enabled)
+		.vmid   = 0 (VMID trace disabled)
+		.cond   = 0 (Conditional instuction trace: disabled)
+		.ts     = 0 (Global timestamp trace disabled)
+		.rs     = 0 (Return Stack disabled)
+		.qe     = 0 (Q element trace: disabled
+		.da     = 0 (Data address trace disabled)
+		.dv     = 0 (Data value trace disabled)
+	STALLCTLR = 00000000
+	SYNCPR = 00
+	CCCTLR = 000 (Cycle Count control)
+	BBCTLR = 000 (Branch Broadcast control)
+	QCTLR not implemented.
+
+===Event Select===
+	EVENTCTL0R = 00000000
+		Event0=[Single]: NEVER
+		Event1=[Single]: NEVER
+		Event2=[Single]: NEVER
+		Event3=[Single]: NEVER
+	EVENTCTL1R = 00000000
+		.insten = 0: Instr Trace event element on events - disabled
+		.dataen = 0: Data trace element disabled
+		.atb = 0: ATB trace trigger disabled
+	TSCTLR = 00 (Event = [Single]: NEVER)
+
+===Trace Enables===
+	VICTLR = 00000201 (ViewInst Event = [Single]: ALWAYS)
+	.exlevel_s = 0, ELs off:[none]
+	.exlevel_ns = 0, ELs off:[none]
+	.ssstatus = 1 (StartStop = started)
+	VIIECTLR = 00000001
+	VISSCTLR = 00000000
+	VIPCSSCTLR = 00000000
+	Data trace not implemented
+
+===Sequencer===
+	SEQEVR0 = 00000000, (Event-F 0->1 = [Single]: NEVER; Event-B 0<-1 = [Single]: NEVER)
+	SEQEVR1 = 00000000, (Event-F 1->2 = [Single]: NEVER; Event-B 1<-2 = [Single]: NEVER)
+	SEQEVR2 = 00000000, (Event-F 2->3 = [Single]: NEVER; Event-B 2<-3 = [Single]: NEVER)
+	SEQRSTEVR = 00, (Seqencer Reset Event = [Single]: NEVER)
+	SEQSTR = 0
+
+===Counters (2)===
+	CNTCTLR0 = 00000000, (Count Event = [Single]: NEVER; Reload Event = [Single]: NEVER)
+	CNTRLDVR0 = 0000 (Reload Value)
+	CNTVR0 = 0000 (Counter Value)
+	CNTCTLR1 = 00000000, (Count Event = [Single]: NEVER; Reload Event = [Single]: NEVER)
+	CNTRLDVR1 = 0000 (Reload Value)
+	CNTVR1 = 0000 (Counter Value)
+
+===Resource Selection Registers (16) ===
+	RSCTLR0 => Fixed resource = FALSE / NEVER
+	RSCTLR1 => Fixed resource = TRUE  / ALWAYS
+	RSCTLR2 = 00000000 ([0:0000 : no resource selected ] )
+	RSCTLR3 = 00000000 ([0:0000 : no resource selected ] )
+	RSCTLR4 = 00000000 ([0:0000 : no resource selected ] )
+	RSCTLR5 = 00000000 ([0:0000 : no resource selected ] )
+	RSCTLR6 = 00000000 ([0:0000 : no resource selected ] )
+	RSCTLR7 = 00000000 ([0:0000 : no resource selected ] )
+	RSCTLR8 = 00000000 ([0:0000 : no resource selected ] )
+	RSCTLR9 = 00000000 ([0:0000 : no resource selected ] )
+	RSCTLR10 = 00000000 ([0:0000 : no resource selected ] )
+	RSCTLR11 = 00000000 ([0:0000 : no resource selected ] )
+	RSCTLR12 = 00000000 ([0:0000 : no resource selected ] )
+	RSCTLR13 = 00000000 ([0:0000 : no resource selected ] )
+	RSCTLR14 = 00000000 ([0:0000 : no resource selected ] )
+	RSCTLR15 = 00000000 ([0:0000 : no resource selected ] )
+
+=== External inputs===
+	EXTINSELR = 00000000
+
+===Single Shot Comparators (1)===
+	SSCCR0 = 00000000, (ARPair=00 [none], ACSingle=0000 [none] RST=0)
+	SSCSR0 = 00000001, (Status=0, Support: PC:N; DV:N, DA:N, INST:Y)
+	SSPCOCR0 = 00000000
+
+===Address Comparators (8)===
+	ACVR0 = 0000AAAAAAAA0000
+	ACATR0 = 00006304, (Type:I Addr, Context: CXTID Ctxt-comp 0,Excl ELs_S[EL0 EL1 ], Excl ELs_NS[EL1 EL2 ],Data: No Data Value Comp)
+	ACVR1 = 0000AAAAAAAA1000
+	ACATR1 = 00006304, (Type:I Addr, Context: CXTID Ctxt-comp 0,Excl ELs_S[EL0 EL1 ], Excl ELs_NS[EL1 EL2 ],Data: No Data Value Comp)
+	ACVR2 = 0000000000000000
+	ACATR2 = 00000000, (Type:I Addr, Context: None Ctxt-comp 0,Excl ELs_S[none], Excl ELs_NS[none],Data: No Data Value Comp)
+	ACVR3 = 0000000000000000
+	ACATR3 = 00000000, (Type:I Addr, Context: None Ctxt-comp 0,Excl ELs_S[none], Excl ELs_NS[none],Data: No Data Value Comp)
+	ACVR4 = 0000000000000000
+	ACATR4 = 00000000, (Type:I Addr, Context: None Ctxt-comp 0,Excl ELs_S[none], Excl ELs_NS[none],Data: No Data Value Comp)
+	ACVR5 = 0000000000000000
+	ACATR5 = 00000000, (Type:I Addr, Context: None Ctxt-comp 0,Excl ELs_S[none], Excl ELs_NS[none],Data: No Data Value Comp)
+	ACVR6 = 0000000000000000
+	ACATR6 = 00000000, (Type:I Addr, Context: None Ctxt-comp 0,Excl ELs_S[none], Excl ELs_NS[none],Data: No Data Value Comp)
+	ACVR7 = 0000000000000000
+	ACATR7 = 00000000, (Type:I Addr, Context: None Ctxt-comp 0,Excl ELs_S[none], Excl ELs_NS[none],Data: No Data Value Comp)
+
+===Data Value Comparators not implemented===
+
+===Context ID Comparators (1)===
+	CIDCVR0 = 0000E91C
+	CIDCCTLR0 = 00000000, (Byte Mask Comps 0-3)
+	CIDCCTLR1 = 00000000, (Byte Mask Comps 4-7)
+
+===VMID Comparators (1)===
+	VMIDCVR0 = 00
+** 00FEF40000: write 010 (CS_ETMV4_CONFIGR) = 00000141 now 00000041
+** 00FEF40000: write 480 (CS_ETMV4_ACATR(i)) = 00006704 now 00006304
+** 00FEF40000: write 488 (CS_ETMV4_ACATR(i)) = 00006704 now 00006304
+ETMv4 static configuration:
+	IDR0 = 28000EA1
+	IDR1 = 4100F404
+	IDR2 = 00000488
+	IDR3 = 0D7B0004
+	IDR4 = 11170004
+	IDR5 = 28C7081E
+ETMv4 dynamic configuration:
+
+===General configuration===
+	TRACEIDR = 00000013
+	CONFIGR = 00000041
+		.instp0 = 0 (Trace LD & ST instructions as P0 off)
+		.bb     = 0 (Branch Broadcast disabled)
+		.cci    = 0 (Cycle Count instruction trace disabled)
+		.cid    = 1 (Context ID trace enabled)
+		.vmid   = 0 (VMID trace disabled)
+		.cond   = 0 (Conditional instuction trace: disabled)
+		.ts     = 0 (Global timestamp trace disabled)
+		.rs     = 0 (Return Stack disabled)
+		.qe     = 0 (Q element trace: disabled
+		.da     = 0 (Data address trace disabled)
+		.dv     = 0 (Data value trace disabled)
+	STALLCTLR = 00000000
+	SYNCPR = 00
+	CCCTLR = 000 (Cycle Count control)
+	BBCTLR = 000 (Branch Broadcast control)
+	QCTLR not implemented.
+
+===Event Select===
+	EVENTCTL0R = 00000000
+		Event0=[Single]: NEVER
+		Event1=[Single]: NEVER
+		Event2=[Single]: NEVER
+		Event3=[Single]: NEVER
+	EVENTCTL1R = 00000000
+		.insten = 0: Instr Trace event element on events - disabled
+		.dataen = 0: Data trace element disabled
+		.atb = 0: ATB trace trigger disabled
+	TSCTLR = 00 (Event = [Single]: NEVER)
+
+===Trace Enables===
+	VICTLR = 00000201 (ViewInst Event = [Single]: ALWAYS)
+	.exlevel_s = 0, ELs off:[none]
+	.exlevel_ns = 0, ELs off:[none]
+	.ssstatus = 1 (StartStop = started)
+	VIIECTLR = 00000001
+	VISSCTLR = 00000000
+	VIPCSSCTLR = 00000000
+	Data trace not implemented
+
+===Sequencer===
+	SEQEVR0 = 00000000, (Event-F 0->1 = [Single]: NEVER; Event-B 0<-1 = [Single]: NEVER)
+	SEQEVR1 = 00000000, (Event-F 1->2 = [Single]: NEVER; Event-B 1<-2 = [Single]: NEVER)
+	SEQEVR2 = 00000000, (Event-F 2->3 = [Single]: NEVER; Event-B 2<-3 = [Single]: NEVER)
+	SEQRSTEVR = 00, (Seqencer Reset Event = [Single]: NEVER)
+	SEQSTR = 0
+
+===Counters (2)===
+	CNTCTLR0 = 00000000, (Count Event = [Single]: NEVER; Reload Event = [Single]: NEVER)
+	CNTRLDVR0 = 0000 (Reload Value)
+	CNTVR0 = 0000 (Counter Value)
+	CNTCTLR1 = 00000000, (Count Event = [Single]: NEVER; Reload Event = [Single]: NEVER)
+	CNTRLDVR1 = 0000 (Reload Value)
+	CNTVR1 = 0000 (Counter Value)
+
+===Resource Selection Registers (16) ===
+	RSCTLR0 => Fixed resource = FALSE / NEVER
+	RSCTLR1 => Fixed resource = TRUE  / ALWAYS
+	RSCTLR2 = 00000000 ([0:0000 : no resource selected ] )
+	RSCTLR3 = 00000000 ([0:0000 : no resource selected ] )
+	RSCTLR4 = 00000000 ([0:0000 : no resource selected ] )
+	RSCTLR5 = 00000000 ([0:0000 : no resource selected ] )
+	RSCTLR6 = 00000000 ([0:0000 : no resource selected ] )
+	RSCTLR7 = 00000000 ([0:0000 : no resource selected ] )
+	RSCTLR8 = 00000000 ([0:0000 : no resource selected ] )
+	RSCTLR9 = 00000000 ([0:0000 : no resource selected ] )
+	RSCTLR10 = 00000000 ([0:0000 : no resource selected ] )
+	RSCTLR11 = 00000000 ([0:0000 : no resource selected ] )
+	RSCTLR12 = 00000000 ([0:0000 : no resource selected ] )
+	RSCTLR13 = 00000000 ([0:0000 : no resource selected ] )
+	RSCTLR14 = 00000000 ([0:0000 : no resource selected ] )
+	RSCTLR15 = 00000000 ([0:0000 : no resource selected ] )
+
+=== External inputs===
+	EXTINSELR = 00000000
+
+===Single Shot Comparators (1)===
+	SSCCR0 = 00000000, (ARPair=00 [none], ACSingle=0000 [none] RST=0)
+	SSCSR0 = 00000001, (Status=0, Support: PC:N; DV:N, DA:N, INST:Y)
+	SSPCOCR0 = 00000000
+
+===Address Comparators (8)===
+	ACVR0 = 0000AAAAAAAA0000
+	ACATR0 = 00006304, (Type:I Addr, Context: CXTID Ctxt-comp 0,Excl ELs_S[EL0 EL1 ], Excl ELs_NS[EL1 EL2 ],Data: No Data Value Comp)
+	ACVR1 = 0000AAAAAAAA1000
+	ACATR1 = 00006304, (Type:I Addr, Context: CXTID Ctxt-comp 0,Excl ELs_S[EL0 EL1 ], Excl ELs_NS[EL1 EL2 ],Data: No Data Value Comp)
+	ACVR2 = 0000000000000000
+	ACATR2 = 00000000, (Type:I Addr, Context: None Ctxt-comp 0,Excl ELs_S[none], Excl ELs_NS[none],Data: No Data Value Comp)
+	ACVR3 = 0000000000000000
+	ACATR3 = 00000000, (Type:I Addr, Context: None Ctxt-comp 0,Excl ELs_S[none], Excl ELs_NS[none],Data: No Data Value Comp)
+	ACVR4 = 0000000000000000
+	ACATR4 = 00000000, (Type:I Addr, Context: None Ctxt-comp 0,Excl ELs_S[none], Excl ELs_NS[none],Data: No Data Value Comp)
+	ACVR5 = 0000000000000000
+	ACATR5 = 00000000, (Type:I Addr, Context: None Ctxt-comp 0,Excl ELs_S[none], Excl ELs_NS[none],Data: No Data Value Comp)
+	ACVR6 = 0000000000000000
+	ACATR6 = 00000000, (Type:I Addr, Context: None Ctxt-comp 0,Excl ELs_S[none], Excl ELs_NS[none],Data: No Data Value Comp)
+	ACVR7 = 0000000000000000
+	ACATR7 = 00000000, (Type:I Addr, Context: None Ctxt-comp 0,Excl ELs_S[none], Excl ELs_NS[none],Data: No Data Value Comp)
+
+===Data Value Comparators not implemented===
+
+===Context ID Comparators (1)===
+	CIDCVR0 = 0000E91C
+	CIDCCTLR0 = 00000000, (Byte Mask Comps 0-3)
+	CIDCCTLR1 = 00000000, (Byte Mask Comps 4-7)
+
+===VMID Comparators (1)===
+	VMIDCVR0 = 00
+CTI at 00FEF20000 (cpu #3) (disabled):
+  TIN=00 TOUT=00 CIN=00 COUT=00 CACTIVE=00 CGATE=0F
+  channels (4):
+    none in use
+  incoming triggers (8):
+  outgoing triggers (8):
+CTI at 00FEE20000 (cpu #2) (disabled):
+  TIN=00 TOUT=00 CIN=00 COUT=00 CACTIVE=00 CGATE=0F
+  channels (4):
+    none in use
+  incoming triggers (8):
+  outgoing triggers (8):
+CTI at 00FED20000 (cpu #1) (disabled):
+  TIN=00 TOUT=00 CIN=00 COUT=00 CACTIVE=00 CGATE=0F
+  channels (4):
+    none in use
+  incoming triggers (8):
+  outgoing triggers (8):
+CTI at 00FEC20000 (cpu #0) (disabled):
+  TIN=00 TOUT=00 CIN=00 COUT=00 CACTIVE=00 CGATE=0F
+  channels (4):
+    none in use
+  incoming triggers (8):
+  outgoing triggers (8):
+CTI at 00FE9B0000 (disabled):
+  TIN=00 TOUT=00 CIN=00 COUT=00 CACTIVE=00 CGATE=0F
+  channels (4):
+    none in use
+  incoming triggers (8):
+  outgoing triggers (8):
+CTI at 00FE9A0000 (disabled):
+  TIN=00 TOUT=00 CIN=00 COUT=00 CACTIVE=00 CGATE=0F
+  channels (4):
+    none in use
+  incoming triggers (8):
+  outgoing triggers (8):
+CTI at 00FE990000 (disabled):
+  TIN=00 TOUT=00 CIN=00 COUT=00 CACTIVE=00 CGATE=0F
+  channels (4):
+    none in use
+  incoming triggers (8):
+    #0: ETF:00FE940000.1 
+    #1: ETF:00FE940000.0 
+    #2: ETF:00FE950000.1 
+    #3: ETF:00FE950000.0 
+    #4: STM:00FE9C0000.0 
+    #5: STM:00FE9C0000.1 
+    #6: STM:00FE9C0000.2 
+    #7: STM:00FE9C0000.3 
+  outgoing triggers (8):
+    #0: ETF:00FE940000.1 
+    #1: ETF:00FE940000.0 
+    #2: ETF:00FE950000.1 
+    #3: ETF:00FE950000.0 
+    #4: ETB:00FE970000.1 
+    #5: ETB:00FE970000.0 
+Attempting to dump kernel memory from 0x0 to 0x1000
+can't open /dev/kmem, trying /dev/mem instead...
+Kernel code entry in /proc/iomem starts at 0x18010000
+Found kernel symbol @ 0xFFFF800008010000 as kernel VA
+Using 0x800010000000 as mapping address, 0x1000 size
+CSUTIL: Created trace configuration export files
+Sending CONT signal to child
+0
+Child exited, , wstatus=0
+** 00FE970000: write 304 (off) = 00001153 now 00001113
+Finalizing trace
+[0xaaaaaaaa0000-0xaaaaaaaa1000]@0x0: /home/aurora/tmp2/coresight-trace/msc-tests/240315_tests/test1
+Done
+
