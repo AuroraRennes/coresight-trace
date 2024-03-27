@@ -1,0 +1,1 @@
+ /home/aurora/tmp2/coresight-trace/msc-tests/240327/fib/cstrace.bin 0x10 1 /home/aurora/tmp2/coresight-trace/coresight-decoder/tests/fib/fib 0xaaaaaaaa0000 0xaaaaaaaa1000
