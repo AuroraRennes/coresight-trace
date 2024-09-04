@@ -73,6 +73,7 @@ const struct board *board;
 struct cs_devices_t devices;
 int udmabuf_num = DEFAULT_UDMABUF_NUM;
 bool decoding_on = false;
+
 int trace_cpu = -1;
 bool export_config = false;
 unsigned long etr_ram_addr = 0;
@@ -82,6 +83,7 @@ struct map_info map_info[RANGE_MAX];
 struct libcsdec_memory_map *mem_map = NULL;
 struct libcsdec_memory_image *mem_img = NULL;
 cov_type_t cov_type = edge_cov;
+bool fifo_sw = false;
 
 unsigned char *trace_bitmap = NULL;
 unsigned int trace_bitmap_size = 0;
@@ -172,7 +174,7 @@ static int trace_sink_polling(unsigned long decoding_threshold)
 
   while (!kill(child_pid, 0)) {
     curr_offset = cs_get_buffer_rwp(devices.etb) - init_pos;
-    if (curr_offset > decoding_threshold) {
+    if (true || curr_offset > decoding_threshold) {
       /* Suspend child_pid process. */
       ret = kill(child_pid, SIGSTOP);
       if (ret < 0) {
@@ -256,6 +258,7 @@ static void *decoder_worker(void *arg)
   }
 
   while (1) {
+    fprintf(stderr, "decoder\n");
     pthread_mutex_lock(&trace_event_mutex);
     while (trace_event != start_event && trace_event != fini_event) {
       pthread_cond_wait(&trace_event_cond, &trace_event_mutex);
@@ -550,6 +553,63 @@ static int disable_cs_trace(bool disable_all)
   return ret;
 }
 
+void* fetch_trace_sw(void *arg)
+{
+  long int count = 0;
+  fprintf(stderr,"launched.\n");
+  cs_device_t d = devices.trace_sinks[0];
+  unsigned int reg = _cs_read(d, CS_ETB_STATUS);
+  fprintf(stderr,"Status: %b\n",reg);
+  reg = _cs_read(d, CS_ETB_CTRL);
+  fprintf(stderr,"CTRL: %b\n",reg);
+  reg = _cs_read(d,  CS_ETB_RAM_MODE);
+  fprintf(stderr,"MODE: %b\n",reg);
+  reg = _cs_read(d, CS_LSR);
+  fprintf(stderr,"lock: %b\n",reg);
+  reg = _cs_read(d, CS_ETMOSLAR);
+  fprintf(stderr,"FFSR: %b\n",reg);
+  reg = _cs_read(d, CS_ETMOSLSR);
+  fprintf(stderr,"FFCR: %b\n",reg);
+
+  _cs_unlock(d); // important!
+  reg = _cs_read(d, CS_LSR);
+  fprintf(stderr,"lock: %b\n",reg);
+
+      d = devices.ptm[0];
+      
+    for(int cpu = 0;cpu<4;cpu++){
+    fprintf(stderr,"Source config cpu %d:\n", cpu);
+    vslog(d,   CS_ETMV4_PRGCTLR, "CS_ETMV4_PRGCTLR");
+    vslog(d,   CS_ETMV4_STATR, "CS_ETMV4_STATR");
+    vslog(d,   CS_ETMV4_CONFIGR, "CS_ETMV4_CONFIGR");
+    vslog(d, CS_ETMV4_BBCTLR, "CS_ETMV4_BBCTLR");
+    vslog(d,   CS_ETMV4_STATR, "CS_ETMV4_STATR");
+    vslog(d,   CS_ETMV4_TRACEIDR, "CS_ETMV4_TRACEIDR");
+    vslog(d,     CS_ETMV4_ACVR(0), "CS_ETMV4_ACVR(0)");
+    vslog(d,     CS_ETMV4_ACVR(1), "CS_ETMV4_ACVR(1)");
+    vslog(d,     CS_ETMV4_ACATR(0), "CS_ETMV4_ACATR(0)"); // several!
+    vslog(d,     CS_ETMV4_CIDCVR(0), "CS_ETMV4_CIDCVR(0)");
+    d = devices.trace_sinks[0];
+  }
+
+  bool running = true;
+  while (running) {
+    unsigned int x = _cs_read(d, CS_ETB_RAM_DATA);
+    fprintf(stdout, "%08x\n",x);
+    count++;
+    if (x == 0xFFFFFFFF) {
+      if (_cs_isset(d, CS_ETB_FLFMT_CTRL, CS_ETB_FLFMT_CTRL_StopFl)) {
+	break;}
+	  
+        unsigned int reg = _cs_read(d, CS_ETB_STATUS);
+	fprintf(stderr,"Status: %08b\n",reg);
+    } else {
+    }
+  }
+  
+  return NULL;
+}
+
 int fetch_trace(void)
 {
   int ret;
@@ -614,7 +674,7 @@ int decode_trace(void)
 
   buf = decoded_trace_buf;
   buf_size = (size_t)((char *)trace_buf_ptr - (char *)buf);
-  fprintf(stderr, "run_decoder(buf=%p, buf_size=0x%lx)\n", buf, buf_size);
+  //fprintf(stderr, "run_decoder(buf=%p, buf_size=0x%lx)\n", buf, buf_size);
   ret = run_decoder(buf, buf_size);
   if (ret < 0) {
     goto exit;
@@ -655,6 +715,16 @@ int start_trace(pid_t pid, bool use_pid_trace)
     goto exit;
   }
 
+  if (fifo_sw) {
+    ret = pthread_create(&decoder_thread, NULL, fetch_trace_sw, NULL);
+    if (ret != 0) {
+      fprintf(stderr, "pthread_create() failed: %d\n", ret);
+      goto exit;
+    } else {
+      fprintf(stderr, "Started sw-fetcher\n");
+    }
+  }
+  sleep(5);
   set_trace_state(running_state);
 
 exit:

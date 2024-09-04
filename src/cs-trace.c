@@ -43,6 +43,7 @@ extern bool decoding_on;
 extern int trace_cpu;
 extern bool export_config;
 extern cov_type_t cov_type;
+extern bool fifo_sw;
 
 extern unsigned char *trace_bitmap;
 extern unsigned int trace_bitmap_size;
@@ -108,8 +109,10 @@ static void usage(char *argv0)
           export_config);
   fprintf(stderr,
           "  -u, --udmabuf=INT\t\tspecify u-dma-buf device number to use "
-          "(default: %d)",
+          "(default: %d)\n",
           udmabuf_num);
+  fprintf(stderr,
+	  "  -s, --swfifo\t\t\tuse software fifo (default: hardware)\n");
   fprintf(stderr,
           "  -v, --verbose[=INT]\t\tverbose output level (default: %d)\n",
           registration_verbose);
@@ -125,6 +128,7 @@ int main(int argc, char *argv[])
       {"export", no_argument, NULL, 'e'},
       {"udmabuf", required_argument, NULL, 'u'},
       {"verbose", optional_argument, NULL, 'v'},
+      {"swfifo", optional_argument, NULL, 's'},
       {"help", no_argument, NULL, 'h'},
       {0, 0, 0, 0},
   };
@@ -136,6 +140,7 @@ int main(int argc, char *argv[])
 
   argvp = NULL;
   registration_verbose = 0;
+  fifo_sw = 0;
   trace_bitmap_size = DEFAULT_TRACE_BITMAP_SIZE;
 
   if (argc < 3) {
@@ -143,7 +148,7 @@ int main(int argc, char *argv[])
     exit(EXIT_SUCCESS);
   }
 
-  while ((opt = getopt_long(argc, argv, "b:c:d:ev::h", long_options,
+  while ((opt = getopt_long(argc, argv, "b:c:d:ev:s::h", long_options,
                             &option_index)) != -1) {
     switch (opt) {
       case 'b':
@@ -176,6 +181,9 @@ int main(int argc, char *argv[])
           registration_verbose = 1;
         }
         break;
+      case 's':
+	fifo_sw = true;
+	break;
       case 'h':
         usage(argv[0]);
         exit(EXIT_SUCCESS);

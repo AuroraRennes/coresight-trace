@@ -23,6 +23,7 @@ const bool return_stack = false;
 extern unsigned long etr_ram_addr;
 extern size_t etr_ram_size;
 extern int registration_verbose;
+extern bool fifo_sw;
 
 void cs_etb_flush_and_wait_stop(struct cs_devices_t *devices)
 {
@@ -238,6 +239,11 @@ int configure_trace(const struct board *board, struct cs_devices_t *devices,
   return 0;
 }
 
+void vslog(const cs_device_t d, const unsigned int symb, const char* name) {
+    unsigned int reg = _cs_read(d, symb);
+    fprintf(stderr, "%s: %08b (%x)\n", name, reg, reg);
+}
+
 int enable_trace(const struct board *board, struct cs_devices_t *devices)
 {
   int i, error_count;
@@ -246,46 +252,72 @@ int enable_trace(const struct board *board, struct cs_devices_t *devices)
     return -1;
   }
 
-  if (cs_sink_etr_setup(devices->etb, etr_ram_addr, etr_ram_size,
-                        board->etr_axictl) != 0) {
-    fprintf(stderr, "Failed to setup ETR\n");
-    return -1;
-  }
-  if (cs_sink_enable(devices->etb) != 0) {
-    fprintf(stderr, "Failed to enable ETR\n");
-    return -1;
-  }
+  cs_device_t d = devices->trace_sinks[0];
+  unsigned int reg = _cs_read(d,  CS_ETB_STATUS);
+  fprintf(stderr,"Status: %b\n",reg);
+  d = devices->ptm[0];
+  vslog(d, CS_ETB_CTRL, "CS_ETB_CTRL");
+  vslog(d, CS_ETB_RAM_MODE, "CS_ETB_RAM_MODE");
+  vslog(d, CS_LSR, "CS_LSR");
+  vslog(d, CS_ETB_FLFMT_STATUS, "CS_ETB_FLFMT_STATUS");
+  vslog(d, CS_ETB_FLFMT_CTRL, "CS_ETB_FLFMT_CTRL");
 
-  if (devices->trace_sinks[0]) {
-    if (cs_sink_etf_setup(devices->trace_sinks[0], CS_ETB_RAM_MODE_HW_FIFO) !=
-        0) {
-      fprintf(stderr, "Failed to setup ETF 1\n");
+  d = devices->trace_sinks[0];
+  
+  if (fifo_sw) {
+    fprintf(stderr, "sw!\n");
+
+    if(cs_tmc_sw_fifo_enable(devices->trace_sinks[0], /*bufwm=*/0x0) != 0){
+      printf("CSDEMO: Could not enable sinks as sw fifo 1/2\n");
       return -1;
     }
-    if (cs_sink_enable(devices->trace_sinks[0]) != 0) {
-      fprintf(stderr, "Failed to enable ETF 1\n");
+    if(cs_tmc_hw_fifo_enable(devices->trace_sinks[1], /*bufwm=*/0x0) != 0){
+      printf("CSDEMO: Could not enable sinks as sw fifo 2/2\n");
+      return -1;
+    }   
+  } else {
+
+    if (cs_sink_etr_setup(devices->etb, etr_ram_addr, etr_ram_size,
+			  board->etr_axictl) != 0) {
+      fprintf(stderr, "Failed to setup ETR\n");
       return -1;
     }
-    if (cs_sink_etf_setup(devices->trace_sinks[1], CS_ETB_RAM_MODE_HW_FIFO) !=
-        0) {
-      fprintf(stderr, "Failed to setup ETF 2\n");
-      return -1;
-    }
-    if (cs_sink_enable(devices->trace_sinks[1]) != 0) {
-      fprintf(stderr, "Failed to enable ETF 2\n");
+    if (cs_sink_enable(devices->etb) != 0) {
+      fprintf(stderr, "Failed to enable ETR\n");
       return -1;
     }
 
-  }
+    if (devices->trace_sinks[0]) {
+      if (cs_sink_etf_setup(devices->trace_sinks[0], CS_ETB_RAM_MODE_HW_FIFO) !=
+	  0) {
+	fprintf(stderr, "Failed to setup ETF 1\n");
+	return -1;
+      }
+      if (cs_sink_enable(devices->trace_sinks[0]) != 0) {
+	fprintf(stderr, "Failed to enable ETF 1\n");
+	return -1;
+      }
+      if (cs_sink_etf_setup(devices->trace_sinks[1], CS_ETB_RAM_MODE_HW_FIFO) !=
+	  0) {
+	fprintf(stderr, "Failed to setup ETF 2\n");
+	return -1;
+      }
+      if (cs_sink_enable(devices->trace_sinks[1]) != 0) {
+	fprintf(stderr, "Failed to enable ETF 2\n");
+	return -1;
+      }
+
+    }
 
     if(cs_tmc_hw_fifo_enable(devices->trace_sinks[0], /*bufwm=*/0x0) != 0){
-	        printf("CSDEMO: Could not enable sinks as hw fifo 1/2 - not running demo\n");
-		      return -1;
-		          }
-  if(cs_tmc_hw_fifo_enable(devices->trace_sinks[1], /*bufwm=*/0x0) != 0){
-	        printf("CSDEMO: Could not enable sinks as hw fifo 2/2 - not running demo\n");
-		      return -1;
-		          }
+      printf("CSDEMO: Could not enable sinks as hw fifo 1/2 - not running demo\n");
+      return -1;
+    }
+    if(cs_tmc_hw_fifo_enable(devices->trace_sinks[1], /*bufwm=*/0x0) != 0){
+      printf("CSDEMO: Could not enable sinks as hw fifo 2/2 - not running demo\n");
+      return -1;
+    }
+  }
 
   for (i = 0; i < board->n_cpu; ++i) {
     cs_trace_enable(devices->ptm[i]);
