@@ -4,7 +4,7 @@
 
 SHELL:=bash
 
-DEFAULT_BOARD?="Marvell ThunderX2"
+DEFAULT_BOARD?="ZCU104"
 
 CSAL_BASE:=CSAL
 CSAL_ARCH:=arm64
@@ -44,6 +44,7 @@ COMMON_OBJS:= \
 
 CFLAGS:= \
   -std=c11 \
+  -g \
   -Wall \
   -DDEFAULT_BOARD_NAME=\"$(DEFAULT_BOARD)\" \
   -I$(INC) \
@@ -96,12 +97,12 @@ endif
 decode: $(CSDEC) trace
 	$(realpath $(CSDEC)) $(shell cat $(DIR)/decoderargs.txt)
 
-trace: $(CS_TRACE) $(TESTS) 
+trace: $(CS_TRACE) $(TESTS)
 	mkdir -p $(DIR) && \
 	cd $(DIR) && \
 	sudo $(realpath $(CS_TRACE)) $(CS_TRACE_FLAGS) -- $(realpath $(TRACEE)) $(TRACEE_ARGS)
 
-debug: $(CS_TRACE) $(TESTS) 
+debug: $(CS_TRACE) $(TESTS)
 	mkdir -p $(DIR) && \
 	cd $(DIR) && \
 	sudo gdb --args $(realpath $(CS_TRACE)) $(CS_TRACE_FLAGS) -- $(realpath $(TRACEE)) $(TRACEE_ARGS)

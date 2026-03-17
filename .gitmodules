@@ -1,6 +1,7 @@
 [submodule "CSAL"]
 	path = CSAL
 	url = git@github.com:AuroraRennes/CSAL.git
+	branch = vs-aurora
 [submodule "coresight-decoder"]
 	path = coresight-decoder
 	url = https://github.com/RICSecLab/coresight-decoder.git

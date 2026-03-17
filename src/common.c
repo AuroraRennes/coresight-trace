@@ -553,62 +553,62 @@ static int disable_cs_trace(bool disable_all)
   return ret;
 }
 
-void* fetch_trace_sw(void *arg)
-{
-  long int count = 0;
-  fprintf(stderr,"launched.\n");
-  cs_device_t d = devices.trace_sinks[0];
-  unsigned int reg = _cs_read(d, CS_ETB_STATUS);
-  fprintf(stderr,"Status: %b\n",reg);
-  reg = _cs_read(d, CS_ETB_CTRL);
-  fprintf(stderr,"CTRL: %b\n",reg);
-  reg = _cs_read(d,  CS_ETB_RAM_MODE);
-  fprintf(stderr,"MODE: %b\n",reg);
-  reg = _cs_read(d, CS_LSR);
-  fprintf(stderr,"lock: %b\n",reg);
-  reg = _cs_read(d, CS_ETMOSLAR);
-  fprintf(stderr,"FFSR: %b\n",reg);
-  reg = _cs_read(d, CS_ETMOSLSR);
-  fprintf(stderr,"FFCR: %b\n",reg);
+// void* fetch_trace_sw(void *arg)
+// {
+//   long int count = 0;
+//   fprintf(stderr,"launched.\n");
+//   cs_device_t d = devices.trace_sinks[0];
+//   unsigned int reg = _cs_read(d, CS_ETB_STATUS);
+//   fprintf(stderr,"Status: %b\n",reg);
+//   reg = _cs_read(d, CS_ETB_CTRL);
+//   fprintf(stderr,"CTRL: %b\n",reg);
+//   reg = _cs_read(d,  CS_ETB_RAM_MODE);
+//   fprintf(stderr,"MODE: %b\n",reg);
+//   reg = _cs_read(d, CS_LSR);
+//   fprintf(stderr,"lock: %b\n",reg);
+//   reg = _cs_read(d, CS_ETMOSLAR);
+//   fprintf(stderr,"FFSR: %b\n",reg);
+//   reg = _cs_read(d, CS_ETMOSLSR);
+//   fprintf(stderr,"FFCR: %b\n",reg);
 
-  _cs_unlock(d); // important!
-  reg = _cs_read(d, CS_LSR);
-  fprintf(stderr,"lock: %b\n",reg);
+//   _cs_unlock(d); // important!
+//   reg = _cs_read(d, CS_LSR);
+//   fprintf(stderr,"lock: %b\n",reg);
 
-      d = devices.ptm[0];
-      
-    for(int cpu = 0;cpu<4;cpu++){
-    fprintf(stderr,"Source config cpu %d:\n", cpu);
-    vslog(d,   CS_ETMV4_PRGCTLR, "CS_ETMV4_PRGCTLR");
-    vslog(d,   CS_ETMV4_STATR, "CS_ETMV4_STATR");
-    vslog(d,   CS_ETMV4_CONFIGR, "CS_ETMV4_CONFIGR");
-    vslog(d, CS_ETMV4_BBCTLR, "CS_ETMV4_BBCTLR");
-    vslog(d,   CS_ETMV4_STATR, "CS_ETMV4_STATR");
-    vslog(d,   CS_ETMV4_TRACEIDR, "CS_ETMV4_TRACEIDR");
-    vslog(d,     CS_ETMV4_ACVR(0), "CS_ETMV4_ACVR(0)");
-    vslog(d,     CS_ETMV4_ACVR(1), "CS_ETMV4_ACVR(1)");
-    vslog(d,     CS_ETMV4_ACATR(0), "CS_ETMV4_ACATR(0)"); // several!
-    vslog(d,     CS_ETMV4_CIDCVR(0), "CS_ETMV4_CIDCVR(0)");
-    d = devices.trace_sinks[0];
-  }
+//       d = devices.ptm[0];
 
-  bool running = true;
-  while (running) {
-    unsigned int x = _cs_read(d, CS_ETB_RAM_DATA);
-    fprintf(stdout, "%08x\n",x);
-    count++;
-    if (x == 0xFFFFFFFF) {
-      if (_cs_isset(d, CS_ETB_FLFMT_CTRL, CS_ETB_FLFMT_CTRL_StopFl)) {
-	break;}
-	  
-        unsigned int reg = _cs_read(d, CS_ETB_STATUS);
-	fprintf(stderr,"Status: %08b\n",reg);
-    } else {
-    }
-  }
-  
-  return NULL;
-}
+//     for(int cpu = 0;cpu<4;cpu++){
+//     fprintf(stderr,"Source config cpu %d:\n", cpu);
+//     vslog(d,   CS_ETMV4_PRGCTLR, "CS_ETMV4_PRGCTLR");
+//     vslog(d,   CS_ETMV4_STATR, "CS_ETMV4_STATR");
+//     vslog(d,   CS_ETMV4_CONFIGR, "CS_ETMV4_CONFIGR");
+//     vslog(d, CS_ETMV4_BBCTLR, "CS_ETMV4_BBCTLR");
+//     vslog(d,   CS_ETMV4_STATR, "CS_ETMV4_STATR");
+//     vslog(d,   CS_ETMV4_TRACEIDR, "CS_ETMV4_TRACEIDR");
+//     vslog(d,     CS_ETMV4_ACVR(0), "CS_ETMV4_ACVR(0)");
+//     vslog(d,     CS_ETMV4_ACVR(1), "CS_ETMV4_ACVR(1)");
+//     vslog(d,     CS_ETMV4_ACATR(0), "CS_ETMV4_ACATR(0)"); // several!
+//     vslog(d,     CS_ETMV4_CIDCVR(0), "CS_ETMV4_CIDCVR(0)");
+//     d = devices.trace_sinks[0];
+//   }
+
+//   bool running = true;
+//   while (running) {
+//     unsigned int x = _cs_read(d, CS_ETB_RAM_DATA);
+//     fprintf(stdout, "%08x\n",x);
+//     count++;
+//     if (x == 0xFFFFFFFF) {
+//       if (_cs_isset(d, CS_ETB_FLFMT_CTRL, CS_ETB_FLFMT_CTRL_StopFl)) {
+// 	break;}
+
+//         unsigned int reg = _cs_read(d, CS_ETB_STATUS);
+// 	fprintf(stderr,"Status: %08b\n",reg);
+//     } else {
+//     }
+//   }
+
+//   return NULL;
+// }
 
 int fetch_trace(void)
 {
@@ -715,15 +715,15 @@ int start_trace(pid_t pid, bool use_pid_trace)
     goto exit;
   }
 
-  if (fifo_sw) {
-    ret = pthread_create(&decoder_thread, NULL, fetch_trace_sw, NULL);
-    if (ret != 0) {
-      fprintf(stderr, "pthread_create() failed: %d\n", ret);
-      goto exit;
-    } else {
-      fprintf(stderr, "Started sw-fetcher\n");
-    }
-  }
+  // if (fifo_sw) {
+  //   ret = pthread_create(&decoder_thread, NULL, fetch_trace_sw, NULL);
+  //   if (ret != 0) {
+  //     fprintf(stderr, "pthread_create() failed: %d\n", ret);
+  //     goto exit;
+  //   } else {
+  //     fprintf(stderr, "Started sw-fetcher\n");
+  //   }
+  // }
   sleep(5);
   set_trace_state(running_state);
 
