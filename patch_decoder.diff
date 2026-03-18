@@ -1,0 +1,39 @@
+diff --git a/include/common.hpp b/include/common.hpp
+index 36da6da..2a63b50 100644
+--- a/include/common.hpp
++++ b/include/common.hpp
+@@ -16,6 +16,8 @@
+ #include <set>
+ #include <string>
+ #include <vector>
++#include <cstdint>
++#include <cstdlib>
+ 
+ using addr_t = std::uint64_t;
+ using image_id_t = std::size_t;
+diff --git a/include/decoder.hpp b/include/decoder.hpp
+index 2e8bed8..24b4a85 100644
+--- a/include/decoder.hpp
++++ b/include/decoder.hpp
+@@ -3,6 +3,8 @@
+ 
+ #pragma once
+ 
++#include "common.hpp"
++
+ enum class PacketType {
+   // Extension header
+   ETM4_PKT_I_EXTENSION,
+diff --git a/include/utils.hpp b/include/utils.hpp
+index 0e9463b..811b0c6 100644
+--- a/include/utils.hpp
++++ b/include/utils.hpp
+@@ -3,6 +3,8 @@
+ 
+ #pragma once
+ 
++#include "common.hpp"
++
+ std::vector<uint8_t> readBinaryFile(const std::string &filename);
+ void writeBinaryFile(const std::vector<uint8_t> &data,
+                      const std::string &filename);
