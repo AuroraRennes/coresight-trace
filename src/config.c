@@ -2,6 +2,10 @@
 /* Copyright (C) ARM Limited, 2013-2016. All rights reserved. */
 /* Copyright 2021 Ricerca Security, Inc. All rights reserved. */
 
+#ifndef _GNU_SOURCE
+#define _GNU_SOURCE
+#endif
+
 #include "config.h"
 
 #include <stdio.h>
@@ -165,7 +169,8 @@ int init_etm(cs_device_t dev)
   cs_etm_config_get_ex(dev, &v4config);
   v4config.flags |= CS_ETMC_TRACE_ENABLE | CS_ETMC_EVENTSELECT;
   /* trace enable */
-  v4config.victlr = 0x201; /* Viewinst - trace all, ss started. */
+  v4config.victlr = CS_ETMV4_VICTLR_ExEL0_S | CS_ETMV4_VICTLR_ExEL1_S | CS_ETMV4_VICTLR_ExEL2_S | CS_ETMV4_VICTLR_ExEL3_S |
+    CS_ETMV4_VICTLR_ExEL1_NS | CS_ETMV4_VICTLR_ExEL2_NS | CS_ETMV4_VICTLR_SSSTATUS | CS_ETMV4_VICTLR_ALWAYS ;
   v4config.viiectlr = 0;   /* no address range */
   v4config.vissctlr = 0;   /* no start stop points */
   /* event select */
@@ -192,7 +197,7 @@ int configure_trace(const struct board *board, struct cs_devices_t *devices,
   Increasing the maximum waiting time for the cs_device_wait() function.
   On the Jetson TX2 board, it takes longer than the standard time to perform a flush.
   */
-  _cs_set_wait_iterations(320000);
+  cs_device_set_wait_repeats(320000);
 
     /* Ensure TPIU isn't generating back-pressure */
     cs_disable_tpiu();
@@ -251,23 +256,23 @@ int enable_trace(const struct board *board, struct cs_devices_t *devices)
   }
 
   if (cs_sink_etr_setup(devices->etb, etr_ram_addr, etr_ram_size,
-                        board->etr_axictl) != 0) {
-    fprintf(stderr, "Failed to setup ETR\n");
-    return -1;
+                          board->etr_axictl) != 0) {
+      fprintf(stderr, "[!] Failed to setup ETR\n");
+      return -1;
   }
   if (cs_sink_enable(devices->etb) != 0) {
     fprintf(stderr, "Failed to enable ETR\n");
     return -1;
   }
 
-  if (devices->trace_sinks[0]) {
-    if (cs_sink_etf_setup(devices->trace_sinks[0], CS_ETB_RAM_MODE_HW_FIFO) !=
-        0) {
-      fprintf(stderr, "Failed to setup ETF\n");
+  for (i = 0; i < devices->num_trace_sinks; i++) {
+    if (cs_sink_etf_setup(devices->trace_sinks[i], CS_TMC_MODE_HWFIFO) != 0) {
+      fprintf(stderr, "Failed to setup ETF %d\n", i + 1);
       return -1;
     }
-    if (cs_sink_enable(devices->trace_sinks[0]) != 0) {
-      fprintf(stderr, "Failed to enable ETF\n");
+
+    if (cs_tmc_hw_fifo_enable(devices->trace_sinks[i], 0x0) != 0) {
+      fprintf(stderr, "Failed to hw_fifo_enable ETF %d\n", i + 1);
       return -1;
     }
   }
@@ -305,8 +310,8 @@ int disable_trace(const struct board *board, struct cs_devices_t *devices)
   for (i = 0; i < board->n_cpu; ++i) {
     cs_trace_disable(devices->ptm[i]);
   }
-  if (devices->trace_sinks[0]) {
-    cs_sink_disable(devices->trace_sinks[0]);
+  for (i = 0; i< devices->num_trace_sinks; i++) {
+    cs_tmc_hw_fifo_disable(devices->trace_sinks[i]);
   }
   cs_sink_disable(devices->etb);
 
@@ -325,11 +330,17 @@ int disable_trace(const struct board *board, struct cs_devices_t *devices)
   return 0;
 }
 
-int enable_trace_sinks_only(struct cs_devices_t *devices)
+int enable_trace_sinks_only(const struct board *board, struct cs_devices_t *devices)
 {
-  int error_count;
+  int i, error_count;
 
   if (!devices) {
+    return -1;
+  }
+
+  if (cs_sink_etr_setup(devices->etb, etr_ram_addr, etr_ram_size,
+                      board->etr_axictl) != 0) {
+    fprintf(stderr, "[!] Failed to setup ETR\n");
     return -1;
   }
 
@@ -338,14 +349,13 @@ int enable_trace_sinks_only(struct cs_devices_t *devices)
     return -1;
   }
 
-  if (devices->trace_sinks[0]) {
-    if (cs_sink_etf_setup(devices->trace_sinks[0], CS_ETB_RAM_MODE_HW_FIFO) !=
-        0) {
-      fprintf(stderr, "Failed to setup ETF\n");
+  for (i = 0; i < devices->num_trace_sinks; i++) {
+    if (cs_sink_etf_setup(devices->trace_sinks[i], CS_TMC_MODE_HWFIFO) != 0) {
+      fprintf(stderr, "Failed to setup ETF %d\n", i + 1);
       return -1;
     }
-    if (cs_sink_enable(devices->trace_sinks[0]) != 0) {
-      fprintf(stderr, "Failed to enable ETF\n");
+    if (cs_tmc_hw_fifo_enable(devices->trace_sinks[i], 0x0) != 0) {
+      fprintf(stderr, "Failed to hw_fifo_enable ETF %d\n", i + 1);
       return -1;
     }
   }
@@ -361,9 +371,9 @@ int enable_trace_sinks_only(struct cs_devices_t *devices)
   return 0;
 }
 
-int disable_trace_sinks_only(struct cs_devices_t *devices)
+int disable_trace_sinks_only(const struct board *board, struct cs_devices_t *devices)
 {
-  int error_count;
+  int i, error_count;
 
   if (!devices) {
     return -1;
@@ -371,8 +381,11 @@ int disable_trace_sinks_only(struct cs_devices_t *devices)
 
   cs_etb_flush_and_wait_stop(devices);
 
-  if (devices->trace_sinks[0]) {
-    cs_sink_disable(devices->trace_sinks[0]);
+
+  for (i = 0; i < devices->num_trace_sinks; i++) {
+    if (devices->trace_sinks[i]) {
+      cs_tmc_hw_fifo_disable(devices->trace_sinks[i]);
+    }
   }
   cs_sink_disable(devices->etb);
 

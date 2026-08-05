@@ -4,7 +4,7 @@
 
 SHELL:=bash
 
-DEFAULT_BOARD?="Marvell ThunderX2"
+DEFAULT_BOARD?="ZCU 104"
 
 CSAL_BASE:=CSAL
 CSAL_ARCH:=arm64
@@ -100,12 +100,12 @@ endif
 decode: $(CSDEC) trace
 	$(realpath $(CSDEC)) $(shell cat $(DIR)/decoderargs.txt)
 
-trace: $(CS_TRACE) $(TESTS) | $(UDMABUF_BUF_PATH)
+trace: $(CS_TRACE) $(TESTS)# |  $(UDMABUF_BUF_PATH)
 	mkdir -p $(DIR) && \
 	cd $(DIR) && \
 	sudo $(realpath $(CS_TRACE)) $(CS_TRACE_FLAGS) -- $(realpath $(TRACEE)) $(TRACEE_ARGS)
 
-debug: $(CS_TRACE) $(TESTS) | $(UDMABUF_BUF_PATH)
+debug: $(CS_TRACE) $(TESTS)# | $(UDMABUF_BUF_PATH)
 	mkdir -p $(DIR) && \
 	cd $(DIR) && \
 	sudo gdb --args $(realpath $(CS_TRACE)) $(CS_TRACE_FLAGS) -- $(realpath $(TRACEE)) $(TRACEE_ARGS)
@@ -149,4 +149,4 @@ dist-clean: clean
 	$(MAKE) -C $(CSAL_BASE) clean $(CSAL_FLAGS)
 	$(MAKE) -C $(CSDEC_BASE) clean
 
-.PHONY: all trace debug decode format libcsal clean dist-clean
+.PHONY: all trace debug decode format libcsal clean dist-clean $(LIBFORKSRV)
