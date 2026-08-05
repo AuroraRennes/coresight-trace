@@ -553,6 +553,37 @@ static int disable_cs_trace(bool disable_all)
   return ret;
 }
 
+
+static void debug_etr_state(struct cs_devices_t *devices) {
+    int unread = cs_get_buffer_unread_bytes(devices->etb);
+    unsigned long rwp = cs_get_buffer_rwp(devices->etb);
+    fprintf(stderr, "[DBG] ETR unread bytes: %d\n", unread);
+    fprintf(stderr, "[DBG] ETR RWP: 0x%lx\n", rwp);
+
+    // Read ETR status register directly
+    unsigned int sts = cs_device_read(devices->etb, CS_ETB_STATUS);
+    unsigned int ffcr = cs_device_read(devices->etb, CS_ETB_FLFMT_CTRL);
+    unsigned int mode = cs_device_read(devices->etb, CS_TMC_MODE);
+    unsigned int size = cs_device_read(devices->etb, CS_ETB_RAM_DEPTH);
+    unsigned int dbalo = cs_device_read(devices->etb, CS_TMC_DBALO);
+    unsigned int dbahi = cs_device_read(devices->etb, CS_TMC_DBAHI);
+    unsigned int axictl = cs_device_read(devices->etb, CS_ETB_AXICTL);
+
+    fprintf(stderr, "[DBG] ETR STS:    0x%08x\n", sts);
+    fprintf(stderr, "[DBG] ETR FFCR:   0x%08x\n", ffcr);
+    fprintf(stderr, "[DBG] ETR MODE:   0x%08x\n", mode);
+    fprintf(stderr, "[DBG] ETR SIZE:   0x%08x (= %u bytes)\n", size, size * 4);
+    fprintf(stderr, "[DBG] ETR DBALO:  0x%08x\n", dbalo);
+    fprintf(stderr, "[DBG] ETR DBAHI:  0x%08x\n", dbahi);
+    fprintf(stderr, "[DBG] ETR AXICTL: 0x%08x\n", axictl);
+
+    // Check ETF states too
+    for (int i = 0; i < devices->num_trace_sinks; i++) {
+        fprintf(stderr, "[DBG] === ETF%d ===\n", i);
+        dump_tmc_config(devices->trace_sinks[i]);
+    }
+}
+
 int fetch_trace(void)
 {
   int ret;
