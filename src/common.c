@@ -100,10 +100,15 @@ static pthread_t decoder_thread;
 
 static pthread_mutex_t trace_mutex;
 static pthread_mutex_t trace_state_mutex;
-static pthread_mutex_t trace_event_mutex;
-static pthread_cond_t trace_event_cond;
 static trace_state_t trace_state = init_state;
 static trace_event_t trace_event = init_event;
+
+static pthread_mutex_t ev_mutex;
+static pthread_cond_t  ev_cond;
+static bool start_pending   = false;
+static bool suspend_pending = false;
+static bool stop_pending    = false;
+static bool fini_pending    = false;   /* sticky */
 
 static pthread_mutex_t trace_decoder_mutex;
 static pthread_cond_t trace_decoder_cond;
@@ -114,46 +119,32 @@ extern int registration_verbose;
 static int enable_cs_trace(pid_t pid);
 static int disable_cs_trace(bool disable_all);
 
-static void signal_trace_event(trace_event_t event)
+
+static void signal_event(bool *flag)
 {
-  pthread_mutex_lock(&trace_event_mutex);
-  trace_event = event;
-  pthread_cond_broadcast(&trace_event_cond);
-  pthread_mutex_unlock(&trace_event_mutex);
+  pthread_mutex_lock(&ev_mutex);
+  *flag = true;
+  pthread_cond_broadcast(&ev_cond);
+  pthread_mutex_unlock(&ev_mutex);
 }
 
-static void wait_trace_event(trace_event_t event)
+/* wait until *flag (consume it) or fini (leave sticky). returns true if fini. */
+static bool wait_event(bool *flag)
 {
-  pthread_mutex_lock(&trace_event_mutex);
-  while (trace_event != event) {
-    pthread_cond_wait(&trace_event_cond, &trace_event_mutex);
-  }
-  pthread_mutex_unlock(&trace_event_mutex);
+  bool is_fini;
+  pthread_mutex_lock(&ev_mutex);
+  while (!*flag && !fini_pending)
+    pthread_cond_wait(&ev_cond, &ev_mutex);
+  is_fini = fini_pending && !*flag;
+  if (!is_fini) *flag = false;
+  pthread_mutex_unlock(&ev_mutex);
+  return is_fini;
 }
 
 static void set_trace_state(trace_state_t new_state)
 {
-  trace_state_t old_state;
-
   pthread_mutex_lock(&trace_state_mutex);
-  old_state = trace_state;
   trace_state = new_state;
-  if (old_state == init_state) {
-    signal_trace_event(init_event);
-  } else if (new_state == fini_state) {
-    signal_trace_event(fini_event);
-  } else if (new_state == ready_state) {
-    signal_trace_event(stop_event);
-  } else if (old_state == ready_state && new_state == running_state) {
-    signal_trace_event(start_event);
-  } else if (old_state == running_state && new_state == suspended_state) {
-    signal_trace_event(suspend_event);
-  } else if (old_state == suspended_state && new_state == running_state) {
-    signal_trace_event(resume_event);
-  } else {
-    fprintf(stderr, "Unexpected trace state transition: %d -> %d\n", old_state,
-            new_state);
-  }
   pthread_mutex_unlock(&trace_state_mutex);
 }
 
@@ -186,13 +177,16 @@ static int trace_sink_polling(unsigned long decoding_threshold)
       }
 
       /* Wait for suspending trace. */
-      wait_trace_event(suspend_event);
+      wait_event(&suspend_pending);
 
       if ((ret = disable_cs_trace(false)) < 0) {
         fprintf(stderr, "disable_cs_trace() failed\n");
         goto exit;
       }
       fetch_trace();
+      /* fetch_trace() empties the ETR via cs_empty_trace_buffer(), which
+       * resets the hardware write pointer back to the buffer base */
+      init_pos = cs_get_buffer_rwp(devices.etb);
 
       enable_cs_trace(child_pid);
       /* Continue child_pid process. */
@@ -215,12 +209,7 @@ static int trace_sink_polling(unsigned long decoding_threshold)
   }
 
 killed:
-  pthread_mutex_lock(&trace_event_mutex);
-  while (trace_event != stop_event && trace_event != fini_event) {
-    pthread_cond_wait(&trace_event_cond, &trace_event_mutex);
-  }
-  pthread_mutex_unlock(&trace_event_mutex);
-
+  wait_event(&stop_pending);
   fetch_trace();
   if ((ret = decode_trace()) < 0) {
     fprintf(stderr, "decode_trace() failed\n");
@@ -245,31 +234,24 @@ static void *decoder_worker(void *arg)
   if (etr_ram_size == 0) {
     etr_ram_size = cs_get_buffer_size_bytes(devices.etb);
   }
-  // if (devices.trace_sinks[0]) {
-  //   etf_ram_size = (size_t)cs_get_buffer_size_bytes(devices.trace_sinks[0]);
-  //   if (etf_ram_size < etr_ram_size) {
-  //     decoding_threshold = etf_ram_size * 2;
-  //   } else {
-  //     decoding_threshold = etr_ram_size;
-  //   }
-  // } else {
-  //   decoding_threshold = etr_ram_size;
-  // }
+  if (devices.trace_sinks[0]) {
+    etf_ram_size = (size_t)cs_get_buffer_size_bytes(devices.trace_sinks[0]);
+    if (etf_ram_size < etr_ram_size) {
+      decoding_threshold = etf_ram_size * 2;
+    } else {
+      decoding_threshold = etr_ram_size;
+    }
+  } else {
+    decoding_threshold = etr_ram_size;
+  }
 
   // Set a threshold value equal to the etr buffer size to avoid pausing the tracing
-  decoding_threshold = etr_ram_size;
+  // decoding_threshold = etr_ram_size;
+  // fprintf(stderr, "[DECODER] decoding_threshold=0x%lx\n", decoding_threshold);
+
   while (1) {
-    pthread_mutex_lock(&trace_event_mutex);
-    while (trace_event != start_event && trace_event != fini_event) {
-      pthread_cond_wait(&trace_event_cond, &trace_event_mutex);
-    }
-    event = trace_event; /* TODO: trace_event can be changed in if cond. */
-    pthread_mutex_unlock(&trace_event_mutex);
-    if (event == start_event) {
+      if (wait_event(&start_pending)) break;
       trace_sink_polling(decoding_threshold);
-    } else if (event == fini_event) {
-      break;
-    }
   }
 
   return NULL;
@@ -366,9 +348,9 @@ static libcsdec_t init_decoder(struct map_info *map_info, int map_info_num)
       char tmp[PATH_MAX];
       strncpy(tmp, map_info[i].path, sizeof(tmp) - 1);
       tmp[sizeof(tmp) - 1] = '\0';
-      const char *bname = basename(tmp); 
+      const char *bname = basename(tmp);
       snprintf(mem_img[i].path, sizeof(mem_img[i].path), "%s", bname);
-            
+
       mem_img[i].size =
           (size_t)ALIGN_UP(map_info[i].end - map_info[i].start, PAGE_SIZE);
     }
@@ -418,16 +400,23 @@ static int fini_decoder(void)
 /* FIXME: Do not initialize global variables in the function */
 static int alloc_trace_buf(void)
 {
+  // Free previous mapping
+  if (trace_buf) {
+    munmap(trace_buf, trace_buf_size);
+    trace_buf = NULL;
+    trace_buf_size = 0;
+  }
+
   trace_buf = mmap(NULL, DEFAULT_TRACE_SIZE, PROT_READ | PROT_WRITE,
                    MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-  if (!trace_buf) {
+  if (trace_buf == MAP_FAILED) {
     perror("mmap");
+    trace_buf = NULL;
     return -1;
   }
   trace_buf_size = DEFAULT_TRACE_SIZE;
   trace_buf_ptr = trace_buf;
-  decoded_trace_buf = trace_buf_ptr;
-
+  decoded_trace_buf = trace_buf;  // both reset to same base
   return 0;
 }
 
@@ -513,7 +502,7 @@ static int enable_cs_trace(pid_t pid)
     is_first_trace = false;
   } else {
     /* Enable trace sinks only once ETMs enabled */
-    if (enable_trace_sinks_only(&devices) < 0) {
+    if (enable_trace_sinks_only(board, &devices) < 0) {
       fprintf(stderr, "enable_trace_sinks_only() failed\n");
       goto exit;
     }
@@ -548,7 +537,7 @@ static int disable_cs_trace(bool disable_all)
         fprintf(stderr, "disable_trace() failed\n");
       }
     } else {
-      if ((ret = disable_trace_sinks_only(&devices)) < 0) {
+      if ((ret = disable_trace_sinks_only(board, &devices)) < 0) {
         fprintf(stderr, "disable_trace_sinks_only() failed\n");
       }
     }
@@ -569,7 +558,7 @@ int fetch_trace(void)
   int ret;
   cs_device_t etb;
   int len;
-  size_t buf_remain;
+  size_t buf_remain, buf_used;
   void *new_trace_buf;
   size_t new_trace_buf_size;
   int n;
@@ -606,9 +595,9 @@ int fetch_trace(void)
 
   n = cs_get_trace_data(etb, trace_buf_ptr, buf_remain);
   if (n <= 0) {
-    fprintf(stderr, "Failed to get trace\n");
+    fprintf(stderr, "[FETCH] ERROR: failed to get trace (n=%d)\n", n);
   } else if (n < len) {
-    fprintf(stderr, "Got incomplete trace\n");
+    fprintf(stderr, "[FETCH] WARNING: incomplete trace (got %d of %d bytes)\n", n, len);
   }
   cs_empty_trace_buffer(etb);
   trace_buf_ptr = (void *)((char *)trace_buf_ptr + n);
@@ -641,7 +630,18 @@ exit:
   return ret;
 }
 
-void trace_suspend_resume_callback(void) { set_trace_state(suspended_state); }
+void trace_suspend_resume_callback(void) {
+  set_trace_state(suspended_state);
+  signal_event(&suspend_pending);
+}
+
+/* Call when the proxy observes the traced child has actually exited/died,
+ * as opposed to the SIGSTOP the decoder thread expects when it pauses the
+ * child mid-execution to drain the ETR buffer (trace_sink_polling()'s
+ * kill(child_pid, SIGSTOP) + wait_event(&suspend_pending)) */
+void trace_child_exited_callback(void) {
+  signal_event(&suspend_pending);
+}
 
 /* Start trace session. CoreSight and decoder must be initialized. */
 int start_trace(pid_t pid, bool use_pid_trace)
@@ -670,6 +670,7 @@ int start_trace(pid_t pid, bool use_pid_trace)
   }
 
   set_trace_state(running_state);
+  signal_event(&start_pending);
 
 exit:
   return ret;
@@ -686,9 +687,9 @@ int stop_trace(bool disable_all)
   }
 
   set_trace_state(ready_state);
+  signal_event(&stop_pending);
 
-  /* FIXME: Hang with condition trace_state == ready_state && trace_event ==
-   * stop_event */
+
   pthread_mutex_lock(&trace_decoder_mutex);
   while (!decoder_ready) {
     pthread_cond_wait(&trace_decoder_cond, &trace_decoder_mutex);
@@ -710,8 +711,9 @@ int init_trace(pid_t parent_pid, pid_t pid)
 
   pthread_mutex_init(&trace_mutex, NULL);
   pthread_mutex_init(&trace_state_mutex, NULL);
-  pthread_mutex_init(&trace_event_mutex, NULL);
-  pthread_cond_init(&trace_event_cond, NULL);
+
+  pthread_mutex_init(&ev_mutex, NULL);
+  pthread_cond_init(&ev_cond, NULL);
 
   pthread_mutex_init(&trace_decoder_mutex, NULL);
   pthread_cond_init(&trace_decoder_cond, NULL);
@@ -753,6 +755,11 @@ int init_trace(pid_t parent_pid, pid_t pid)
       fprintf(stderr, "init_decoder() failed\n");
       goto exit;
     }
+    /* decoder_ready defaults to true so stop_trace() never blocks when no
+     * decoder thread exists (AFLCS_NO_DECODER). Since we ARE spawning one
+     * here, arm it false first otherwise stop_trace() for the very first
+     * execution(s) sees the stale "ready" default and returns immediately. */
+    decoder_ready = false;
     ret = pthread_create(&decoder_thread, NULL, decoder_worker, NULL);
     if (ret != 0) {
       fprintf(stderr, "pthread_create() failed: %d\n", ret);
@@ -790,6 +797,7 @@ void fini_trace(void)
   if (decoding_on) {
     /* Cancel decoder_thread. Assuming stop singal is sent prior to it. */
     set_trace_state(fini_state);
+    signal_event(&fini_pending);
     pthread_join(decoder_thread, NULL);
   } else {
     fetch_trace();
@@ -810,8 +818,9 @@ void fini_trace(void)
   pthread_cond_destroy(&trace_decoder_cond);
   pthread_mutex_destroy(&trace_decoder_mutex);
 
-  pthread_cond_destroy(&trace_event_cond);
-  pthread_mutex_destroy(&trace_event_mutex);
-  pthread_mutex_destroy(&trace_state_mutex);
   pthread_mutex_destroy(&trace_mutex);
+  pthread_mutex_destroy(&trace_state_mutex);
+
+  pthread_cond_destroy(&ev_cond);
+  pthread_mutex_destroy(&ev_mutex);
 }
