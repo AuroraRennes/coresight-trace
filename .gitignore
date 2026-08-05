@@ -8,3 +8,5 @@ cs-trace
 *.ini
 tests/fib
 edge_coverage_bitmap.out
+libforksrv.so
+libforksrv.a
