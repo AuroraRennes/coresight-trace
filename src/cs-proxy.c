@@ -174,7 +174,6 @@ static void __afl_start_forkserver(char *argv[])
     close(FORKSRV_FD);
     close(FORKSRV_FD + 1);
 
-   
     char *ld_preload = "LD_PRELOAD=";
     char *ld_library_path = "LD_LIBRARY_PATH=";
 
@@ -192,7 +191,7 @@ static void __afl_start_forkserver(char *argv[])
     if(cs_defer_forksrv == NULL){
       ld_preload = append_string(ld_preload,ld_forksrv_path);
     }
-    
+
     char* envp[] = {"__CS_PROXY=1", ld_preload, ld_library_path, NULL};
 
     DEBUGF("Try run target: %s \n with envp=\n", argv[0]);
@@ -284,7 +283,7 @@ int main(int argc, char *argv[])
     perror("Failed to set signal handler");
     return 1;
   }
- 
+
   ld_forksrv_path = get_libforksrv_path("libforksrv.so");
   if(access(ld_forksrv_path, F_OK) != 0){
     fprintf(stderr, "Error: libforksrv.so not found\n");
@@ -350,7 +349,7 @@ int main(int argc, char *argv[])
   }
 
   /* then we initialize the shared memory map and start the forkserver */
-  __afl_map_shm();  
+  __afl_map_shm();
   __afl_start_forkserver(argvp);
 
   while (__afl_next_testcase() > 0) {
@@ -360,7 +359,10 @@ int main(int argc, char *argv[])
       if (WIFSTOPPED(status) && WSTOPSIG(status) == SIGSTOP) {
         trace_suspend_resume_callback();
       } else {
-        /* Child process has exited. */
+        /* Child process has exited/died (possibly killed out from under a
+         * decoder-issued SIGSTOP that never got delivered - see
+         * trace_child_exited_callback()). */
+        trace_child_exited_callback();
         break;
       }
     }
