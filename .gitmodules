@@ -7,3 +7,7 @@
 [submodule "udmabuf"]
 	path = udmabuf
 	url = https://github.com/ikwzm/udmabuf.git
+[submodule "stalker-decoder"]
+	path = stalker-decoder
+	url = https://github.com/AuroraRennes/ptm2human.git
+	branch = stalker
