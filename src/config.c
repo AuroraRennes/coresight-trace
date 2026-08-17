@@ -9,6 +9,7 @@
 #include "config.h"
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <stdbool.h>
 #include <assert.h>
 #include <limits.h>
@@ -19,6 +20,9 @@
 #include "cs_util_create_snapshot.h"
 
 #include "utils.h"
+#ifdef AFLCS_STALKER_DECODER
+#include "stalker.h"
+#endif
 
 #define SHOW_ETM_CONFIG 0
 
@@ -61,9 +65,9 @@ void show_etm_config(cs_device_t etm)
   cs_etm_config_print_ex(etm, p_config);
 }
 
-static void set_etmv4_addr_range(struct map_info *range,
-                                 struct _adrcmp *addr_comp,
-                                 unsigned int acc_type_ex)
+void set_etmv4_addr_range(struct map_info *range,
+                          struct _adrcmp *addr_comp,
+                          unsigned int acc_type_ex)
 {
   const unsigned int acc_type =
       CS_ETMV4_ACATR_ExEL0_S | CS_ETMV4_ACATR_ExEL1_S | CS_ETMV4_ACATR_ExEL2_S |
@@ -115,12 +119,16 @@ static int configure_etmv4_addr_range_cid(cs_device_t etm,
     tconfig.flags |= CS_ETMC_CXID_COMP;
   }
 
+#ifdef AFLCS_STALKER_DECODER
+  stalker_configure_addr_range(range, &tconfig);
+#else
   for (int i = 0; i < range_count; i++) {
       set_etmv4_addr_range(&range[i], &tconfig.addr_comps[i * 2], 0);
       tconfig.addr_comps_acc_mask |= 0x3 << (i * 2);
       /* program the address comp pair i for include */
       tconfig.viiectlr |= 1 << i;
   }
+#endif
 
   tconfig.flags |= CS_ETMC_ADDR_COMP;
 
@@ -247,6 +255,94 @@ int configure_trace(const struct board *board, struct cs_devices_t *devices,
   return 0;
 }
 
+/* Switch ETM branch broadcast mode on all configured ETMs.
+ * bb_mode=1 -> branch broadcast enabled
+ * bb_mode=0 -> atom mode */
+int set_etm_bb_mode(const struct board *board, struct cs_devices_t *devices,
+                    int bb_mode)
+{
+  int i, error_count;
+
+  if (!board || !devices) {
+    return -1;
+  }
+
+  for (i = 0; i < board->n_cpu; ++i) {
+    cs_etmv4_config_t tconfig;
+    cs_device_t etm = devices->ptm[i];
+
+    cs_etm_config_init_ex(etm, &tconfig);
+    tconfig.flags = CS_ETMC_CONFIG;
+    cs_etm_config_get_ex(etm, &tconfig);
+
+    tconfig.configr.bits.bb = bb_mode ? 1 : 0;
+
+    tconfig.flags = CS_ETMC_CONFIG;
+    cs_etm_config_put_ex(etm, &tconfig);
+
+    /* AFLCS_BB_VERIFY=1: read the config register back after the write, to
+     * confirm the branch-broadcast bit actually took. TRCCONFIGR.BB is bit 3;
+     * without branch broadcast a direct branch emits no address packet at
+     * all, so an edge-mode decode would see almost nothing in range and look
+     * like a decoder fault rather than a configuration one. */
+    if (getenv("AFLCS_BB_VERIFY")) {
+      cs_etmv4_config_t rb;
+      cs_etm_config_init_ex(etm, &rb);
+      rb.flags = CS_ETMC_CONFIG;
+      cs_etm_config_get_ex(etm, &rb);
+      fprintf(stderr, "[BB-VERIFY] etm#%d requested bb=%d readback configr.bb=%d\n",
+              i, bb_mode ? 1 : 0, rb.configr.bits.bb);
+    }
+
+    /* Resume tracing: undo the programming-mode side effect of
+     * cs_etm_config_put_ex() above. */
+    if (cs_trace_enable(etm) != 0) {
+      fprintf(stderr, "Failed to re-enable ETM #%d after bb_mode=%d\n", i, bb_mode);
+      return -1;
+    }
+  }
+
+  error_count = cs_error_count();
+  if (error_count > 0) {
+    fprintf(stderr, "%u errors setting bb_mode=%d\n", error_count, bb_mode);
+    return -1;
+  }
+
+  return 0;
+}
+
+/* Clear the ETR formatter's EnFTC/EnFCont bits, per Yue et al., RAID'24 sec.
+ * 4.2 ("we set the EnFt and EnTI bits of the formatter control register to
+ * 0"), to leave a raw single-source ETMv4 byte stream in the capture buffer.
+ *
+ * NOTE: this does not take effect on the ZCU104 -- captures still arrive as
+ * 16-byte formatter frames, which is why etmv4_decode() deformats. Left in
+ * place because it is harmless and matches the paper, but it is not what
+ * makes decoding work here.
+ *
+ * Must be called after cs_sink_enable()/cs_sink_etr_setup(), which OR these
+ * bits back in every time the ETR is re-armed, so it needs reapplying every
+ * exec. Only safe for the single-ETM, single-core-pinned case: an unformatted
+ * stream carries no per-source ID to demultiplex. */
+int set_etr_formatter_bypass(struct cs_devices_t *devices, bool disable_formatter)
+{
+  if (!devices) {
+    return -1;
+  }
+
+  if (!disable_formatter) {
+    return 0;
+  }
+
+  if (cs_device_clear(devices->etb, CS_ETB_FLFMT_CTRL,
+                      CS_ETB_FLFMT_CTRL_EnFTC | CS_ETB_FLFMT_CTRL_EnFCont) != 0) {
+    fprintf(stderr, "Failed to disable ETR formatter\n");
+    return -1;
+  }
+
+  return 0;
+}
+
 int enable_trace(const struct board *board, struct cs_devices_t *devices)
 {
   int i, error_count;
@@ -264,6 +360,11 @@ int enable_trace(const struct board *board, struct cs_devices_t *devices)
     fprintf(stderr, "Failed to enable ETR\n");
     return -1;
   }
+#ifdef AFLCS_STALKER_DECODER
+  if (set_etr_formatter_bypass(devices, true) != 0) {
+    return -1;
+  }
+#endif
 
   for (i = 0; i < devices->num_trace_sinks; i++) {
     if (cs_sink_etf_setup(devices->trace_sinks[i], CS_TMC_MODE_HWFIFO) != 0) {
@@ -348,6 +449,11 @@ int enable_trace_sinks_only(const struct board *board, struct cs_devices_t *devi
     fprintf(stderr, "Failed to enable ETR\n");
     return -1;
   }
+#ifdef AFLCS_STALKER_DECODER
+  if (set_etr_formatter_bypass(devices, true) != 0) {
+    return -1;
+  }
+#endif
 
   for (i = 0; i < devices->num_trace_sinks; i++) {
     if (cs_sink_etf_setup(devices->trace_sinks[i], CS_TMC_MODE_HWFIFO) != 0) {
