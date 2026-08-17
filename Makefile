@@ -24,6 +24,9 @@ CSDEC:=$(CSDEC_BASE)/processor
 CSDEC_INC:=$(CSDEC_BASE)/include
 LIBCSDEC:=$(CSDEC_BASE)/libcsdec.a
 
+STALKER_DEC_BASE:=stalker-decoder
+STALKER_DEC_INC:=$(STALKER_DEC_BASE)
+
 UDMABUF_BASE:=udmabuf
 UDMABUF_KMOD:=$(UDMABUF_BASE)/u-dma-buf.ko
 UDMABUF_BUF_PATH:=/dev/udmabuf0
@@ -36,6 +39,7 @@ HDRS:= \
   $(INC)/config.h \
   $(INC)/known-boards.h \
   $(INC)/utils.h \
+  $(INC)/stalker.h \
 
 COMMON_OBJS:= \
   src/common.o \
@@ -51,6 +55,26 @@ CFLAGS:= \
   -I$(CSDEC_INC) \
   -lpthread \
   -lcapstone \
+
+# STALKER_DECODER=1 selects Stalker's own ETMv4 decoder in place of coresight-decoder
+ifneq ($(strip $(STALKER_DECODER)),)
+  CFLAGS+=-DAFLCS_STALKER_DECODER -I$(STALKER_DEC_INC)
+  COMMON_OBJS+= \
+    $(STALKER_DEC_BASE)/etmv4.o \
+    $(STALKER_DEC_BASE)/tracer-etmv4.o \
+    $(STALKER_DEC_BASE)/stream.o \
+    $(STALKER_DEC_BASE)/etmv4_decode.o \
+    $(STALKER_DEC_BASE)/etb_format.o \
+    $(STALKER_DEC_BASE)/stalker_adapter.o \
+    src/stalker.o \
+
+  # DECODER_VERBOSE=1 restores the decoder's per-packet dump and its error/progress logging,
+  # compiled out by default because it is in the hot path
+  ifneq ($(strip $(DECODER_VERBOSE)),)
+    CFLAGS+=-DAFLCS_DECODER_VERBOSE
+  endif
+
+endif
 
 ifneq ($(strip $(PERF)),)
   EXEC_COUNT?=1000
