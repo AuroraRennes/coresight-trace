@@ -128,8 +128,10 @@ $(LIBFORKSRV):
 	$(MAKE) -C  $(LIBFORKSRV_PATH) && \
 	cp $(LIBFORKSRV_PATH)/libforksrv.so ./libforksrv.so
 
+# `lib` rather than the default target: the default also builds CSAL's demos/,
+# which are never linked here and fail to build on the ZCU104 toolchain.
 libcsal:
-	$(MAKE) -C $(CSAL_BASE) $(CSAL_FLAGS)
+	$(MAKE) -C $(CSAL_BASE) lib $(CSAL_FLAGS)
 
 $(LIBCSACCESS): libcsal
 $(LIBCSACCUTIL): libcsal
