@@ -96,7 +96,11 @@ static bool trace_overflow_occurred = false;
 static int trace_id = -1;
 static pid_t child_pid = -1;
 static bool is_first_trace = true;
+
+/* Last bb_mode requested via trace_set_bb_mode() */
+static int current_bb_mode = 0;
 static libcsdec_t decoder = NULL;
+
 static void *trace_buf = NULL;
 static size_t trace_buf_size = 0;
 static void *trace_buf_ptr = NULL;
@@ -367,6 +371,23 @@ bool trace_did_overflow(void)
   return trace_overflow_occurred;
 }
 
+/* Toggle ETM branch-broadcast mode. Must be called only while tracing is stopped */
+int trace_set_bb_mode(int bb_mode)
+{
+  int ret = set_etm_bb_mode(board, &devices, bb_mode);
+
+  current_bb_mode = bb_mode ? 1 : 0;
+
+  /* Force the next enable_cs_trace() down the full configure_trace()+ enable_trace() */
+  is_first_trace = true;
+#ifdef AFLCS_STALKER_DECODER
+  /* Keep Stalker's own software-side bb_mode global in sync with the value above */
+  stalker_set_bb_mode(bb_mode);
+#endif
+  return ret;
+}
+
+
 static libcsdec_t init_decoder(struct map_info *map_info, int map_info_num)
 {
   libcsdec_t decoder;
@@ -559,6 +580,15 @@ static int enable_cs_trace(pid_t pid)
       goto exit;
     }
     is_first_trace = false;
+
+    /* Restore previous bb mode (trace config wipes it) */
+    if (current_bb_mode) {
+      if (set_etm_bb_mode(board, &devices, current_bb_mode) < 0) {
+        fprintf(stderr, "Failed to restore bb_mode=%d after reconfigure\n",
+                current_bb_mode);
+        goto exit;
+      }
+    }
   } else {
     /* Enable trace sinks only once ETMs enabled */
     if (enable_trace_sinks_only(board, &devices) < 0) {
