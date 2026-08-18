@@ -39,12 +39,14 @@ HDRS:= \
   $(INC)/config.h \
   $(INC)/known-boards.h \
   $(INC)/utils.h \
+  $(INC)/freq_gov.h \
   $(INC)/stalker.h \
 
 COMMON_OBJS:= \
   src/common.o \
   src/config.o \
   src/utils.o \
+  src/freq_gov.o \
 
 CFLAGS:= \
   -std=c11 \
