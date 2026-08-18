@@ -5,6 +5,7 @@
 #define CS_TRACE_COMMON_H
 
 #include <stdbool.h>
+#include <stddef.h>
 #include <sys/types.h>
 
 typedef enum {
@@ -20,6 +21,8 @@ int start_trace(pid_t pid, bool use_pid_trace);
 int stop_trace(bool disable_all);
 void trace_suspend_resume_callback(void);
 void trace_child_exited_callback(void);
+bool trace_did_overflow(void);
+size_t trace_captured_bytes(void);
 int export_trace(const char *trace_name, const char *trace_args_name);
 
 #endif /* CS_TRACE_COMMON_H */

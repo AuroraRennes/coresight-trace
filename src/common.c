@@ -28,6 +28,9 @@
 #include "cs_util_create_snapshot.h"
 
 #include "libcsdec.h"
+#ifdef AFLCS_STALKER_DECODER
+#include "stalker.h"
+#endif
 
 #include "common.h"
 #include "known-boards.h"
@@ -87,6 +90,9 @@ cov_type_t cov_type = edge_cov;
 unsigned char *trace_bitmap = NULL;
 unsigned int trace_bitmap_size = 0;
 
+/* Set when a decode pass reaches a LIBCSDEC_ERROR_OVERFLOW_PACKET */
+static bool trace_overflow_occurred = false;
+
 static int trace_id = -1;
 static pid_t child_pid = -1;
 static bool is_first_trace = true;
@@ -95,6 +101,12 @@ static void *trace_buf = NULL;
 static size_t trace_buf_size = 0;
 static void *trace_buf_ptr = NULL;
 static void *decoded_trace_buf = NULL;
+
+/* Diagnostic: bytes actually captured into trace_buf so far this exec */
+size_t trace_captured_bytes(void)
+{
+  return (size_t)((char *)trace_buf_ptr - (char *)trace_buf);
+}
 
 static pthread_t decoder_thread;
 
@@ -228,12 +240,21 @@ exit:
 static void *decoder_worker(void *arg)
 {
   trace_event_t event;
+#ifndef AFLCS_STALKER_DECODER
   size_t etf_ram_size;
+#endif
   unsigned long decoding_threshold;
 
   if (etr_ram_size == 0) {
     etr_ram_size = cs_get_buffer_size_bytes(devices.etb);
   }
+
+#ifdef AFLCS_STALKER_DECODER
+  /* Stalker lets the child run completely */
+  decoding_threshold = etr_ram_size / 2;
+#else
+  /* Base coresight mode: drain against whichever sink is actually the
+   * bottleneck. */
   if (devices.trace_sinks[0]) {
     etf_ram_size = (size_t)cs_get_buffer_size_bytes(devices.trace_sinks[0]);
     if (etf_ram_size < etr_ram_size) {
@@ -244,10 +265,7 @@ static void *decoder_worker(void *arg)
   } else {
     decoding_threshold = etr_ram_size;
   }
-
-  // Set a threshold value equal to the etr buffer size to avoid pausing the tracing
-  // decoding_threshold = etr_ram_size;
-  // fprintf(stderr, "[DECODER] decoding_threshold=0x%lx\n", decoding_threshold);
+#endif
 
   while (1) {
       if (wait_event(&start_pending)) break;
@@ -260,12 +278,16 @@ static void *decoder_worker(void *arg)
 /* TODO: Take cov_type as a argument. */
 static int reset_decoder(struct map_info *map_info, int map_info_num)
 {
-  libcsdec_result_t ret;
-  int i;
-
   if (!decoder) {
     return -1;
   }
+
+#ifdef AFLCS_STALKER_DECODER
+  trace_overflow_occurred = false;
+  return stalker_reset();
+#else
+  libcsdec_result_t ret;
+  int i;
 
   if (!mem_map) {
     mem_map = malloc(sizeof(struct libcsdec_memory_map) * map_info_num);
@@ -282,6 +304,8 @@ static int reset_decoder(struct map_info *map_info, int map_info_num)
 
   ret = LIBCSDEC_ERROR;
 
+  trace_overflow_occurred = false;
+
   switch (cov_type) {
     case edge_cov:
       ret = libcsdec_reset_edge(decoder, trace_id, map_info_num, mem_map);
@@ -294,18 +318,28 @@ static int reset_decoder(struct map_info *map_info, int map_info_num)
   }
 
   return (ret == LIBCSDEC_SUCCESS) ? 0 : -1;
+#endif
 }
 
 /* TODO: Take cov_type as a argument. */
 static int run_decoder(void *buf, size_t buf_size)
 {
-  libcsdec_result_t ret;
-
   if (!decoder) {
     return -1;
   }
 
-  ret = LIBCSDEC_ERROR;
+#ifdef AFLCS_STALKER_DECODER
+  {
+    bool overflow = false;
+    int ret;
+    ret = stalker_run(trace_bitmap, trace_bitmap_size, buf, buf_size, &overflow);
+    if (overflow) {
+      trace_overflow_occurred = true;
+    }
+    return ret;
+  }
+#else
+  libcsdec_result_t ret = LIBCSDEC_ERROR;
 
   switch (cov_type) {
     case edge_cov:
@@ -318,13 +352,24 @@ static int run_decoder(void *buf, size_t buf_size)
       return -1;
   }
 
+  if (ret == LIBCSDEC_ERROR_OVERFLOW_PACKET) {
+    trace_overflow_occurred = true;
+    fprintf(stderr, "[DECODER] overflow packet observed, truncating decode for this exec\n");
+  }
+
   return (ret == LIBCSDEC_SUCCESS) ? 0 : -1;
+#endif
+}
+
+/* Checks if any decode pass overflowed */
+bool trace_did_overflow(void)
+{
+  return trace_overflow_occurred;
 }
 
 static libcsdec_t init_decoder(struct map_info *map_info, int map_info_num)
 {
   libcsdec_t decoder;
-  int i;
 
   if (!trace_bitmap) {
     trace_bitmap = malloc(trace_bitmap_size);
@@ -334,6 +379,15 @@ static libcsdec_t init_decoder(struct map_info *map_info, int map_info_num)
       goto exit;
     }
   }
+
+#ifdef AFLCS_STALKER_DECODER
+  /* Actual decode state lives in stalker-decoder/'s globals, set up once
+   * by stalker_setup() (called from init_trace(), which has the pid this
+   * needs). */
+  decoder = (libcsdec_t)STALKER_DECODER_HANDLE;
+  goto exit;
+#else
+  int i;
 
   if (!mem_img) {
     mem_img = malloc(sizeof(struct libcsdec_memory_image) * map_info_num);
@@ -373,6 +427,7 @@ static libcsdec_t init_decoder(struct map_info *map_info, int map_info_num)
       decoder = (libcsdec_t)NULL;
       break;
   }
+#endif
 
 exit:
   return decoder;
@@ -385,6 +440,9 @@ static int fini_decoder(void)
     return -1;
   }
 
+#ifdef AFLCS_STALKER_DECODER
+  return stalker_fini();
+#else
   switch (cov_type) {
     case edge_cov:
       libcsdec_finish_edge(decoder);
@@ -395,6 +453,7 @@ static int fini_decoder(void)
   }
 
   return 0;
+#endif
 }
 
 /* FIXME: Do not initialize global variables in the function */
@@ -786,6 +845,12 @@ int init_trace(pid_t parent_pid, pid_t pid)
       fprintf(stderr, "init_decoder() failed\n");
       goto exit;
     }
+#ifdef AFLCS_STALKER_DECODER
+    if (stalker_setup(pid, map_info, range_count) < 0) {
+      fprintf(stderr, "stalker_setup() failed\n");
+      goto exit;
+    }
+#endif
     /* decoder_ready defaults to true so stop_trace() never blocks when no
      * decoder thread exists (AFLCS_NO_DECODER). Since we ARE spawning one
      * here, arm it false first otherwise stop_trace() for the very first
