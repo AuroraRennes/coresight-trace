@@ -186,7 +186,11 @@ int init_etm(cs_device_t dev)
   v4config.eventctlr1r = 0;
   /* config */
   v4config.stallcrlr = 0x2100; /* NOOVERFLOW */
-  v4config.syncpr = 0;            /* no sync */
+  /* TRCSYNCPR.PERIOD: 0 is no periodic sync, N is an A-Sync every 2^N bytes */
+  char *syncpr_str = getenv("AFLCS_ETM_SYNCPR");
+  unsigned int syncpr = 0;
+  if (syncpr_str) syncpr = (unsigned int)atoi(syncpr_str);
+  v4config.syncpr = syncpr;
   cs_etm_config_put_ex(dev, &v4config);
 
   return 0;
@@ -466,6 +470,15 @@ int enable_trace_sinks_only(const struct board *board, struct cs_devices_t *devi
     }
   }
 
+#ifdef AFLCS_STALKER_DECODER
+  /* Sinks-only leaves the ETM free-running, so a capture can begin mid-stream
+   * with no A-Sync. Force a real cycle so every window has a sync point.  With
+   * TRCSYNCPR.PERIOD at 0 this is the only sync guarantee. */
+  for (i = 0; i < board->n_cpu; ++i) {
+    cs_trace_enable(devices->ptm[i]);
+  }
+#endif
+
   cs_checkpoint();
 
   error_count = cs_error_count();
@@ -487,6 +500,13 @@ int disable_trace_sinks_only(const struct board *board, struct cs_devices_t *dev
 
   cs_etb_flush_and_wait_stop(devices);
 
+#ifdef AFLCS_STALKER_DECODER
+  /* Paired with enable_trace_sinks_only()'s cs_trace_enable(): returns the ETM
+   * to programming mode so the next enable is a real transition, not a no-op. */
+  for (i = 0; i < board->n_cpu; ++i) {
+    cs_trace_disable(devices->ptm[i]);
+  }
+#endif
 
   for (i = 0; i < devices->num_trace_sinks; i++) {
     if (devices->trace_sinks[i]) {
