@@ -14,6 +14,9 @@
 
 #include "config.h"
 #include "common.h"
+#ifdef AFLCS_STALKER_DECODER
+#include "freq_gov.h"
+#endif
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -45,13 +48,32 @@ u8 first_run = 1;
 u32 exec_count = 0;
 #endif
 
+#ifdef AFLCS_STALKER_DECODER
+static unsigned long long total_exec_count = 0;
+static unsigned long long overflow_exec_count = 0;
+/* Upfront calibration, matching Stalker's cpu_frequency_analysis(). Seeds
+ * rarely overflow, so the ramp is usually inert; AFLCS_FREQ_CALIBRATE=0 skips it. */
+static int needs_calibration = 1;
+#endif /* AFLCS_STALKER_DECODER */
+
 /* TODO: Remove extern variables. */
 extern int udmabuf_num;
 extern bool decoding_on;
 extern unsigned char *trace_bitmap;
 extern unsigned int trace_bitmap_size;
 extern cov_type_t cov_type;
+#ifdef AFLCS_STALKER_DECODER
+extern int trace_cpu;
+#endif
 char *ld_forksrv_path;
+
+#ifdef AFLCS_STALKER_DECODER
+static freq_mode_t current_freq_mode(void)
+{
+  return (cov_type == path_cov) ? FREQ_MODE_ATOM : FREQ_MODE_ADDR;
+}
+#endif
+
 /* Error reporting to forkserver controller */
 
 void send_forkserver_error(int error)
@@ -230,9 +252,107 @@ static void __afl_start_forkserver(char *argv[])
   }
 }
 
+#ifdef AFLCS_STALKER_DECODER
+/* Fresh child via the inner protocol only, never AFL++'s outer pipes. Safe to
+ * repeat on one testcase until __afl_end_testcase(); used for hidden retries. */
+static s32 fork_fresh_child(void)
+{
+  s32 was_killed = 0;
+  s32 child_pid;
+
+  if (write(proxy_ctl_fd, &was_killed, 4) != 4) return -1;
+  if (read(proxy_st_fd, &child_pid, 4) != 4) return -1;
+
+  return child_pid;
+}
+#endif /* AFLCS_STALKER_DECODER */
+
+/* Arms tracing and resumes a suspended child. report_to_afl must be true for
+ * exactly one call per outer request: AFL++ reads one pid, then one status. */
+static int start_and_resume(s32 child_pid, int report_to_afl)
+{
+  start_trace(child_pid, false);
+
+  if (report_to_afl) {
+    if (write(FORKSRV_FD + 1, &child_pid, 4) != 4) return -1;
+  }
+
+  if (kill(child_pid, SIGCONT) < 0) return -1;
+
+  return 0;
+}
+
+/* Waits for the child to exit or hit the drain safety net, then finalizes the
+ * trace. Shared by the normal path, hidden retries, and calibration steps. */
+static int wait_for_child_and_stop_trace(s32 *out_status)
+{
+  s32 status;
+
+  while (1) {
+    if (read(proxy_st_fd, &status, 4) != 4) return -1;
+    if (WIFSTOPPED(status) && WSTOPSIG(status) == SIGSTOP) {
+      trace_suspend_resume_callback();
+    } else {
+      trace_child_exited_callback();
+      break;
+    }
+  }
+
+  if (stop_trace(false) < 0) return -1;
+  if (out_status) *out_status = status;
+
+  return 0;
+}
+
+#ifdef AFLCS_STALKER_DECODER
+struct calib_ctx {
+  s32 child_pid;
+  int have_child;
+};
+
+/* freq_gov_calibrate()'s run_one_shot callback: one exec of the staged input,
+ * reporting whether it overflowed. Never reports to AFL++. */
+static int calibration_run_one_shot(void *ctx_)
+{
+  struct calib_ctx *ctx = (struct calib_ctx *)ctx_;
+  s32 pid;
+
+  if (ctx->have_child) {
+    pid = ctx->child_pid;
+    ctx->have_child = 0;
+  } else {
+    pid = fork_fresh_child();
+    if (pid < 0) return 1;
+  }
+  ctx->child_pid = pid;
+
+  if (start_and_resume(pid, /*report_to_afl=*/0) < 0) return 1;
+  if (wait_for_child_and_stop_trace(NULL) < 0) return 1;
+  freq_gov_restore_max();
+
+  return decoding_on && trace_did_overflow();
+}
+
+/* Fork+arm+resume a hidden retry child at the governor's frequency for
+ * `mode`. Never reports to AFL++. */
+static s32 retry_child(freq_mode_t mode)
+{
+  s32 pid = fork_fresh_child();
+  if (pid < 0) return -1;
+
+  freq_gov_apply(mode);
+  if (start_and_resume(pid, /*report_to_afl=*/0) < 0) return -1;
+
+  return pid;
+}
+#endif /* AFLCS_STALKER_DECODER */
+
 static u32 __afl_next_testcase(void)
 {
   s32 was_killed, child_pid;
+#ifdef AFLCS_STALKER_DECODER
+  freq_mode_t mode;
+#endif
 
   /* Wait for parent by reading from the pipe. Abort if read fails. */
   if (read(FORKSRV_FD, &was_killed, 4) != 4) return 1;
@@ -244,15 +364,42 @@ static u32 __afl_next_testcase(void)
   if (unlikely(first_run)) {
     if (init_trace(fsrv_pid, child_pid) < 0) return -1;
     first_run = 0;
+
+#ifdef AFLCS_STALKER_DECODER
+    freq_gov_init(trace_cpu, cov_type == edge_cov);
+#endif
   }
 
-  start_trace(child_pid, false);
+#ifdef AFLCS_STALKER_DECODER
+  mode = current_freq_mode();
 
-  /* report that we are starting the target */
-  if (write(FORKSRV_FD + 1, &child_pid, 4) != 4) return -1;
+  if (unlikely(needs_calibration)) {
+    needs_calibration = 0;
 
-  /* Resume child process. */
-  kill(child_pid, SIGCONT);
+    /* Calibrate on this first input: ramp up from the floor with a fresh
+     * child per step, stopping at the first overflow. */
+    struct calib_ctx ctx = { .child_pid = child_pid, .have_child = 1 };
+    freq_gov_calibrate(mode, calibration_run_one_shot, &ctx);
+
+    if (cov_type == edge_cov) {
+      struct calib_ctx bb_ctx = { .child_pid = -1, .have_child = 0 };
+
+      if (trace_set_bb_mode(1) < 0) {
+        FATAL("Failed to enable ETM branch broadcast for AFLCS_COV=edge");
+      }
+
+      /* Re-ramp with branch broadcast on */
+      freq_gov_calibrate(mode, calibration_run_one_shot, &bb_ctx);
+    }
+
+    child_pid = fork_fresh_child();
+    if (child_pid < 0) return -1;
+  }
+
+  freq_gov_apply(mode);
+#endif /* AFLCS_STALKER_DECODER */
+
+  if (start_and_resume(child_pid, /*report_to_afl=*/1) < 0) return -1;
 
   return child_pid;
 }
@@ -304,7 +451,14 @@ int main(int argc, char *argv[])
   }
 
   argvp = NULL;
-  registration_verbose = 0;
+  registration_verbose = getenv("AFLCS_REG_VERBOSE") ? atoi(getenv("AFLCS_REG_VERBOSE")) : 0;
+
+#ifdef AFLCS_STALKER_DECODER
+  if ((ptr = getenv("AFLCS_FREQ_CALIBRATE")) != NULL && !strcmp(ptr, "0")) {
+    needs_calibration = 0;
+    OKF("afl-cs-proxy upfront frequency calibration OFF");
+  }
+#endif
 
   if (getenv("AFLCS_NO_DECODER")) {
     OKF("afl-cs-proxy decoder OFF");
@@ -353,21 +507,57 @@ int main(int argc, char *argv[])
   __afl_start_forkserver(argvp);
 
   while (__afl_next_testcase() > 0) {
-    /* Handle child process suspend/resume */
-    while (1) {
-      if (read(proxy_st_fd, &status, 4) != 4) return -1;
-      if (WIFSTOPPED(status) && WSTOPSIG(status) == SIGSTOP) {
-        trace_suspend_resume_callback();
-      } else {
-        /* Child process has exited/died (possibly killed out from under a
-         * decoder-issued SIGSTOP that never got delivered - see
-         * trace_child_exited_callback()). */
-        trace_child_exited_callback();
-        break;
-      }
-    }
+#ifdef AFLCS_STALKER_DECODER
+    /* Stalker's ACFMM: only its decoder reports per-exec overflow, so under
+     * coresight-decoder this loop is a plain single-pass wait-and-finalize. */
+    freq_mode_t mode = current_freq_mode();
+    int cur_repetition_num = 0;
+    int forced_min_done = 0;
+    int overflowed;
 
-    if (stop_trace(false) < 0) return -1;
+    for (;;) {
+      /* Handle child suspend/resume, then finalize this attempt's trace. */
+      if (wait_for_child_and_stop_trace(&status) < 0) return -1;
+      freq_gov_restore_max();
+
+      overflowed = decoding_on && trace_did_overflow();
+      total_exec_count++;
+      if (overflowed) overflow_exec_count++;
+      if (decoding_on && (total_exec_count % 100) == 0 &&
+          getenv("AFLCS_STALKER_DIAG")) {
+        fprintf(stderr, "[OVERFLOW] %llu/%llu execs overflowed (%.2f%%)\n",
+                (unsigned long long)overflow_exec_count,
+                (unsigned long long)total_exec_count,
+                100.0 * (double)overflow_exec_count / (double)total_exec_count);
+      }
+
+      int should_retry = freq_gov_should_retry(mode, overflowed, cur_repetition_num);
+      freq_gov_on_result(mode, overflowed);
+
+      if (should_retry) {
+        /* Overflow on the precise pass: throttle down and re-execute via the
+         * inner protocol. Matches Stalker's bb_mode-gated retry_to_fuzz(). */
+        cur_repetition_num++;
+        if (retry_child(mode) < 0) return -1;
+        continue;
+      }
+
+      /* Check for overflow and reduce freq if needed */
+      if (overflowed && mode == FREQ_MODE_ADDR && !forced_min_done &&
+          !freq_gov_at_floor(mode) &&
+          cur_repetition_num >= FREQ_GOV_MAX_REPETITION_NUM) {
+        /* Retries exhausted: one final run pinned to the floor frequency. */
+        forced_min_done = 1;
+        freq_gov_force_min();
+        if (retry_child(mode) < 0) return -1;
+        continue;
+      }
+
+      break;
+    }
+#else
+    if (wait_for_child_and_stop_trace(&status) < 0) return -1;
+#endif
 
     if(!decoding_on){
       trace_bitmap[0] = 1;

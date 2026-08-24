@@ -174,9 +174,22 @@ static void read_available_frequencies(void)
   }
 }
 
-/* Pin the frequency to `target`. Order is important for changes to be accepted */
+/* Last value set_freq() wrote, or 0 when the hardware state is unknown.
+ * Guards the redundant-write skip below. */
+static unsigned long long last_set_freq = 0;
+
+/* Pin the frequency to `target`; write order matters for it to be accepted.
+ * Skipped when already there: four sysfs writes per call is not free. */
 static void set_freq(unsigned long long target, const char *why)
 {
+  if (target == last_set_freq) {
+    if (freq_diag) {
+      fprintf(stderr, "[FREQ_GOV] set %llu kHz (%s) skipped, already set\n",
+              target, why);
+    }
+    return;
+  }
+
   if (freq_diag) {
     fprintf(stderr, "[FREQ_GOV] set %llu kHz (%s)\n", target, why);
   }
@@ -185,6 +198,8 @@ static void set_freq(unsigned long long target, const char *why)
   write_sysfs("scaling_max_freq", target);
   write_sysfs("scaling_min_freq", target);
   write_sysfs("scaling_setspeed", target);
+
+  last_set_freq = target;
 }
 
 /* ============== SAVE/RESTORE ============== */
@@ -210,6 +225,9 @@ static void freq_gov_restore_system(void)
     (void)!write(fd, restore_ops[i].val, strlen(restore_ops[i].val));
     close(fd);
   }
+
+  /* Bounds and governor just moved; the last set_freq() no longer applies. */
+  last_set_freq = 0;
 }
 
 /* Signal hooking to restore base frequency */
@@ -305,6 +323,7 @@ void freq_gov_init(int cpu, int addr_only)
 
   /* userspace, so scaling_setspeed pins the frequency directly */
   write_sysfs_str("scaling_governor", "userspace");
+  last_set_freq = 0; /* governor just changed, force the next set_freq through */
 
   /* Initialize stats for each mode, starting at max freq */
   for (mode = 0; mode < FREQ_MODE_COUNT; mode++) {
@@ -315,7 +334,7 @@ void freq_gov_init(int cpu, int addr_only)
     total_execs[mode] = 0;
     total_overflow_execs[mode] = 0;
   }
-  /* Matching Stalker on path/hybrid */
+  /* Matching Stalker on path */
   freq_interval = addr_only_mode ? MIN_FREQ_INTERVAL : FREQ_INTERVAL;
 
   fprintf(stderr,

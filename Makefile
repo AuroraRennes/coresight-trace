@@ -39,14 +39,13 @@ HDRS:= \
   $(INC)/config.h \
   $(INC)/known-boards.h \
   $(INC)/utils.h \
-  $(INC)/freq_gov.h \
   $(INC)/stalker.h \
+  $(INC)/freq_gov.h \
 
 COMMON_OBJS:= \
   src/common.o \
   src/config.o \
   src/utils.o \
-  src/freq_gov.o \
 
 CFLAGS:= \
   -std=c11 \
@@ -69,6 +68,7 @@ ifneq ($(strip $(STALKER_DECODER)),)
     $(STALKER_DEC_BASE)/etb_format.o \
     $(STALKER_DEC_BASE)/stalker_adapter.o \
     src/stalker.o \
+    src/freq_gov.o \
 
   # DECODER_VERBOSE=1 restores the decoder's per-packet dump and its error/progress logging,
   # compiled out by default because it is in the hot path
