@@ -139,7 +139,11 @@ debug: $(CS_TRACE) $(TESTS)# | $(UDMABUF_BUF_PATH)
 format:
 	clang-format -i $(INC)/*.h src/*.c
 
-$(LIBCSDEC):
+LIBCSDEC_DEPS := $(wildcard $(CSDEC_BASE)/src/*.cpp) \
+  $(wildcard $(CSDEC_BASE)/include/*.hpp) \
+  $(CSDEC_BASE)/Makefile
+
+$(LIBCSDEC): $(LIBCSDEC_DEPS)
 	$(MAKE) -C $(CSDEC_BASE) $(CSDEC_TARGET)
 
 $(CSDEC): $(LIBCSDEC)
