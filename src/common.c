@@ -97,6 +97,10 @@ static int trace_id = -1;
 static pid_t child_pid = -1;
 static bool is_first_trace = true;
 
+/* Whether configure_trace() has ever run. Until it has, the ETMs are not ours
+ * to reprogram. */
+static bool trace_ever_configured = false;
+
 /* Last bb_mode requested via trace_set_bb_mode() */
 static int current_bb_mode = 0;
 static libcsdec_t decoder = NULL;
@@ -374,7 +378,12 @@ bool trace_did_overflow(void)
 /* Toggle ETM branch-broadcast mode. Must be called only while tracing is stopped */
 int trace_set_bb_mode(int bb_mode)
 {
-  int ret = set_etm_bb_mode(board, &devices, bb_mode);
+  int ret = 0;
+
+  /* Before the first configure_trace() the ETMs hold no configuration */
+  if (trace_ever_configured) {
+    ret = set_etm_bb_mode(board, &devices, bb_mode);
+  }
 
   current_bb_mode = bb_mode ? 1 : 0;
 
@@ -580,6 +589,7 @@ static int enable_cs_trace(pid_t pid)
       goto exit;
     }
     is_first_trace = false;
+    trace_ever_configured = true;
 
     /* Restore previous bb mode (trace config wipes it) */
     if (current_bb_mode) {
