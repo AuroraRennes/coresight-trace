@@ -57,6 +57,9 @@ static int addr_only_mode = 0;
 /* AFLCS_FREQ_DIAG=1 logs every frequency write with its origin. */
 static int freq_diag = 0;
 
+/* AFLCS_FREQ_GOV=0 disables the frequency governor */
+static int g_enabled = 1;
+
 /* Set by freq_gov_force_min(), consumed by the next freq_gov_apply(). */
 static int force_min_pending = 0;
 
@@ -287,6 +290,16 @@ void freq_gov_init(int cpu, int addr_only)
   g_cpu = cpu;
   addr_only_mode = addr_only;
 
+  {
+    const char *ptr = getenv("AFLCS_FREQ_GOV");
+    if (ptr != NULL && !strcmp(ptr, "0")) {
+      g_enabled = 0;
+      fprintf(stderr, "[FREQ_GOV] disabled by AFLCS_FREQ_GOV=0, "
+                      "CPU frequency left untouched\n");
+      return;
+    }
+  }
+
   system_max_cpufreq = read_sysfs("cpuinfo_max_freq");
   system_min_cpufreq = read_sysfs("cpuinfo_min_freq");
   read_available_frequencies();
@@ -352,6 +365,8 @@ int freq_gov_calibrate(freq_mode_t mode, int (*run_one_shot)(void *ctx),
 {
   int i, runs = 0;
 
+  if (!g_enabled) return 0;
+
   cur_idx[mode] = 0;
 
   for (i = 0; i < freq_table_num; i++) {
@@ -376,6 +391,8 @@ int freq_gov_calibrate(freq_mode_t mode, int (*run_one_shot)(void *ctx),
 /* Apply the frequency for a given mode */
 void freq_gov_apply(freq_mode_t mode)
 {
+  if (!g_enabled) return;
+
   if (force_min_pending) {
     /* One forced run at the floor. cur_idx is deliberately not written: a last
      * resort for one testcase is not evidence about where the mode belongs. */
@@ -390,6 +407,8 @@ void freq_gov_apply(freq_mode_t mode)
 /* Between execs, so the proxy's own decode work does not run throttled. */
 void freq_gov_restore_max(void)
 {
+  if (!g_enabled) return;
+
   set_freq(system_max_cpufreq, "restore_max");
 }
 
@@ -401,6 +420,8 @@ void freq_gov_force_min(void)
 /* One exec's outcome. Called per attempt, retries included. */
 void freq_gov_on_result(freq_mode_t mode, int overflowed)
 {
+  if (!g_enabled) return;
+
   total_execs[mode]++;
 
   /* Check for overflows */
@@ -450,6 +471,7 @@ void freq_gov_on_result(freq_mode_t mode, int overflowed)
 int freq_gov_should_retry(freq_mode_t mode, int overflowed, int cur_repetition_num)
 {
   /* Matches Stalker's retry to fuzz only on bb mode */
+  if (!g_enabled) return 0;
   if (!overflowed) return 0;
   if (mode != FREQ_MODE_ADDR) return 0;
   if (cur_idx[FREQ_MODE_ADDR] <= 0) return 0;
@@ -457,4 +479,9 @@ int freq_gov_should_retry(freq_mode_t mode, int overflowed, int cur_repetition_n
   return 1;
 }
 
-int freq_gov_at_floor(freq_mode_t mode) { return cur_idx[mode] == 0; }
+/* Disabled reads as "already at the floor" so the proxy skips its forced-min
+ * final run as well. */
+int freq_gov_at_floor(freq_mode_t mode)
+{
+  return !g_enabled || cur_idx[mode] == 0;
+}
