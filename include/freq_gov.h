@@ -26,9 +26,10 @@ typedef enum {
  * addr pass runs alone, so freq_interval stays fixed instead of adapting. */
 void freq_gov_init(int cpu, int addr_only);
 
-/* Ramps up through the frequency table once at first execution */
-void freq_gov_calibrate(freq_mode_t mode, int (*run_one_shot)(void *ctx),
-                        void *ctx);
+/* Ramps up through the frequency table once at first execution. Returns the
+ * number of one-shot executions it performed, 0 when the governor is disabled */
+int freq_gov_calibrate(freq_mode_t mode, int (*run_one_shot)(void *ctx),
+                       void *ctx);
 
 /* Pins scaling_{min,max}_freq/scaling_setspeed */
 void freq_gov_apply(freq_mode_t mode);

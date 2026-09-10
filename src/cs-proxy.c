@@ -54,6 +54,10 @@ static unsigned long long overflow_exec_count = 0;
 /* Upfront calibration, matching Stalker's cpu_frequency_analysis(). Seeds
  * rarely overflow, so the ramp is usually inert; AFLCS_FREQ_CALIBRATE=0 skips it. */
 static int needs_calibration = 1;
+
+/* Enable ETM branch broadcast once, on the first testcase, when AFLCS_COV=edge.
+ * Independent of the calibration above. */
+static int needs_bb_enable = 1;
 #endif /* AFLCS_STALKER_DECODER */
 
 /* TODO: Remove extern variables. */
@@ -352,6 +356,7 @@ static u32 __afl_next_testcase(void)
   s32 was_killed, child_pid;
 #ifdef AFLCS_STALKER_DECODER
   freq_mode_t mode;
+  int did_calibrate = 0;
 #endif
 
   /* Wait for parent by reading from the pipe. Abort if read fails. */
@@ -377,21 +382,30 @@ static u32 __afl_next_testcase(void)
     needs_calibration = 0;
 
     /* Calibrate on this first input: ramp up from the floor with a fresh
-     * child per step, stopping at the first overflow. */
+     * child per step, stopping at the first overflow. The ramp's first step
+     * consumes the child the forkserver just handed us. */
     struct calib_ctx ctx = { .child_pid = child_pid, .have_child = 1 };
-    freq_gov_calibrate(mode, calibration_run_one_shot, &ctx);
+    did_calibrate = freq_gov_calibrate(mode, calibration_run_one_shot, &ctx) > 0;
+  }
 
-    if (cov_type == edge_cov) {
-      struct calib_ctx bb_ctx = { .child_pid = -1, .have_child = 0 };
+  /* Activate branch broadcast for enable */
+  if (unlikely(needs_bb_enable) && cov_type == edge_cov) {
+    needs_bb_enable = 0;
 
-      if (trace_set_bb_mode(1) < 0) {
-        FATAL("Failed to enable ETM branch broadcast for AFLCS_COV=edge");
-      }
-
-      /* Re-ramp with branch broadcast on */
-      freq_gov_calibrate(mode, calibration_run_one_shot, &bb_ctx);
+    if (trace_set_bb_mode(1) < 0) {
+      FATAL("Failed to enable ETM branch broadcast for AFLCS_COV=edge");
     }
 
+    if (did_calibrate) {
+      /* Re-ramp with branch broadcast on */
+      struct calib_ctx bb_ctx = { .child_pid = -1, .have_child = 0 };
+      freq_gov_calibrate(mode, calibration_run_one_shot, &bb_ctx);
+    }
+  }
+
+  if (unlikely(did_calibrate)) {
+    /* The ramp consumed the child the forkserver just handed us; asking for a
+     * replacement here is what keeps the inner protocol in step. */
     child_pid = fork_fresh_child();
     if (child_pid < 0) return -1;
   }

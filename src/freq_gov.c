@@ -347,10 +347,11 @@ void freq_gov_init(int cpu, int addr_only)
 
 /* Start from the floor frequency and run until the first overflow, keeping the
  * highest rung that ran clean, once on first execution. */
-void freq_gov_calibrate(freq_mode_t mode, int (*run_one_shot)(void *ctx),
-                        void *ctx)
+int freq_gov_calibrate(freq_mode_t mode, int (*run_one_shot)(void *ctx),
+                       void *ctx)
 {
-  int i;
+  int i, runs = 0;
+
   cur_idx[mode] = 0;
 
   for (i = 0; i < freq_table_num; i++) {
@@ -359,12 +360,15 @@ void freq_gov_calibrate(freq_mode_t mode, int (*run_one_shot)(void *ctx),
             freq_table[i]);
 
     /* Run the program */
+    runs++;
     if (run_one_shot(ctx)) break;
     cur_idx[mode] = i;
   }
 
   fprintf(stderr, "[FREQ_GOV] calibration settled mode=%d start_freq=%llu kHz\n",
           mode, freq_table[cur_idx[mode]]);
+
+  return runs;
 }
 
 /* ============== PER-EXEC ============== */
