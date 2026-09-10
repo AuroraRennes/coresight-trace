@@ -10,9 +10,14 @@
  *   https://doi.org/10.1145/3678890.3678933
  */
 
+#ifndef _GNU_SOURCE
+#define _GNU_SOURCE
+#endif
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <errno.h>
 #include <fcntl.h>
 #include <unistd.h>
 #include <signal.h>
@@ -69,9 +74,13 @@ static char saved_governor[32] = {0};
 static struct {
   char path[160];
   char val[32];
-} restore_ops[3];
+} restore_ops[5];
 
 static int restore_op_num = 0;
+
+/* Write end of the restore guard's pipe. Held open for the proxy's whole
+ * lifetime and never written: the guard acts on its closing. */
+static int guard_fd = -1;
 
 /* ============== SYSFS ============== */
 
@@ -216,8 +225,8 @@ static void add_restore_op(const char *file_name, const char *val)
   restore_op_num++;
 }
 
-/* Restore with base frequency on exit/signal. Paths and values are preformatted
- * by add_restore_op() at init */
+/* Put the policy back the way init found it, on exit/signal/proxy death. Paths
+ * and values are preformatted by add_restore_op() at init */
 static void freq_gov_restore_system(void)
 {
   int i;
@@ -245,6 +254,58 @@ static void freq_gov_hook_signal(int sig)
 {
   if (signal(sig, SIG_IGN) == SIG_IGN) return; /* deliberately ignored */
   signal(sig, freq_gov_signal_restore);
+}
+
+/* afl-fuzz ends the proxy with SIGKILL, which bypasses atexit() and signal
+ * handlers. The guard is a child blocked on a pipe whose only write end the
+ * proxy holds: the kernel closes it on any proxy death and the guard restores
+ * the policy. Forked from a multithreaded process, the child only makes
+ * async-signal-safe calls. */
+static void freq_gov_spawn_guard(void)
+{
+  int fds[2], fd, max_fd;
+  pid_t pid;
+
+  max_fd = (int)sysconf(_SC_OPEN_MAX);
+  if (max_fd < 0 || max_fd > 4096) max_fd = 4096;
+
+  if (pipe2(fds, O_CLOEXEC) < 0) {
+    perror("[FREQ_GOV] restore guard pipe");
+    return;
+  }
+
+  pid = fork();
+  if (pid < 0) {
+    perror("[FREQ_GOV] restore guard fork");
+    close(fds[0]);
+    close(fds[1]);
+    return;
+  }
+
+  if (pid == 0) {
+    char c;
+    ssize_t n;
+
+    /* Own session, deaf to the signals aimed at the proxy. Keep only stderr and
+     * the read end, so no afl-fuzz pipe outlives the proxy through us. */
+    setsid();
+    signal(SIGINT, SIG_IGN);
+    signal(SIGTERM, SIG_IGN);
+    signal(SIGHUP, SIG_IGN);
+    for (fd = 0; fd < max_fd; fd++) {
+      if (fd != fds[0] && fd != STDERR_FILENO) close(fd);
+    }
+
+    do {
+      n = read(fds[0], &c, 1);
+    } while (n > 0 || (n < 0 && errno == EINTR));
+
+    freq_gov_restore_system();
+    _exit(0);
+  }
+
+  close(fds[0]);
+  guard_fd = fds[1];
 }
 
 /* ============== REPORTING ============== */
@@ -314,18 +375,38 @@ void freq_gov_init(int cpu, int addr_only)
     fclose(fp);
   }
 
-  /* Restore targets at the hardware bounds */
-  if (system_min_cpufreq) {
+  /* Restore targets */
+  {
+    unsigned long long saved_min = read_sysfs("scaling_min_freq");
+    unsigned long long saved_max = read_sysfs("scaling_max_freq");
+    unsigned long long saved_speed = 0;
     char v[32];
-    snprintf(v, sizeof(v), "%llu", system_min_cpufreq);
-    add_restore_op("scaling_min_freq", v);
+
+    if (!strcmp(saved_governor, "userspace")) {
+      saved_speed = read_sysfs("scaling_setspeed");
+    }
+
+    if (system_min_cpufreq) {
+      snprintf(v, sizeof(v), "%llu", system_min_cpufreq);
+      add_restore_op("scaling_min_freq", v);
+    }
+    if (saved_max) {
+      snprintf(v, sizeof(v), "%llu", saved_max);
+      add_restore_op("scaling_max_freq", v);
+    }
+    if (saved_min) {
+      snprintf(v, sizeof(v), "%llu", saved_min);
+      add_restore_op("scaling_min_freq", v);
+    }
+    if (saved_governor[0]) add_restore_op("scaling_governor", saved_governor);
+    if (saved_speed) {
+      snprintf(v, sizeof(v), "%llu", saved_speed);
+      add_restore_op("scaling_setspeed", v);
+    }
   }
-  if (system_max_cpufreq) {
-    char v[32];
-    snprintf(v, sizeof(v), "%llu", system_max_cpufreq);
-    add_restore_op("scaling_max_freq", v);
-  }
-  if (saved_governor[0]) add_restore_op("scaling_governor", saved_governor);
+
+  /* SIGKILL is how afl-fuzz usually ends the proxy; see freq_gov_spawn_guard(). */
+  freq_gov_spawn_guard();
 
   /* Hook on signals and exit */
   atexit(freq_gov_restore_system);
