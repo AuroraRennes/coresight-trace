@@ -134,6 +134,21 @@ static pthread_mutex_t trace_decoder_mutex;
 static pthread_cond_t trace_decoder_cond;
 static bool decoder_ready = true;
 
+/* AFLCS_EXPORT_ON_DECODE_FAIL: export each failing trace as
+ * cstrace-<n>.bin + decoderargs-<n>.txt in the working directory, for offline
+ * reproduction with coresight-decoder's processor (see `make decode`). */
+static void export_failed_trace(void)
+{
+  static unsigned int n = 0;
+  char trace_name[64], args_name[64];
+
+  if (!getenv("AFLCS_EXPORT_ON_DECODE_FAIL")) return;
+  snprintf(trace_name, sizeof(trace_name), "cstrace-%u.bin", n);
+  snprintf(args_name, sizeof(args_name), "decoderargs-%u.txt", n);
+  n++;
+  export_trace(trace_name, args_name);
+}
+
 extern int registration_verbose;
 
 static int enable_cs_trace(pid_t pid);
@@ -223,6 +238,7 @@ static int trace_sink_polling(unsigned long decoding_threshold)
       /* Decode trace during the process is running. */
       if ((ret = decode_trace()) < 0) {
         fprintf(stderr, "decode_trace() failed\n");
+        export_failed_trace();
         goto exit;
       }
     }
@@ -233,6 +249,7 @@ killed:
   fetch_trace();
   if ((ret = decode_trace()) < 0) {
     fprintf(stderr, "decode_trace() failed\n");
+    export_failed_trace();
     goto exit;
   }
 
