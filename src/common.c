@@ -785,6 +785,20 @@ int start_trace(pid_t pid, bool use_pid_trace)
 
   alloc_trace_buf();
 
+  /* AFL clears the shared map between outer executions, but hidden retries do
+   * not cross that boundary. Always start an attempt with an empty map so a
+   * partial failed decode cannot contaminate its replacement. */
+  if (trace_bitmap) memset(trace_bitmap, 0, trace_bitmap_size);
+
+  if (decoding_on) {
+    /* Publish not-ready before the tracee can be resumed. Leaving this to the
+     * worker creates a race on short executions: stop_trace() can observe the
+     * previous attempt's true value and return before this attempt is decoded. */
+    pthread_mutex_lock(&trace_decoder_mutex);
+    decoder_ready = false;
+    pthread_mutex_unlock(&trace_decoder_mutex);
+  }
+
   if (decoding_on && ((ret = reset_decoder(map_info, range_count)) < 0)) {
     fprintf(stderr, "reset_decoder() failed\n");
     goto exit;
@@ -817,14 +831,21 @@ int stop_trace(bool disable_all)
   }
 
   set_trace_state(ready_state);
-  signal_event(&stop_pending);
-
-
-  pthread_mutex_lock(&trace_decoder_mutex);
-  while (!decoder_ready) {
-    pthread_cond_wait(&trace_decoder_cond, &trace_decoder_mutex);
+  if (decoding_on) {
+    signal_event(&stop_pending);
+  } else if (fetch_trace() < 0) {
+    fprintf(stderr, "fetch_trace() failed\n");
+    ret = -1;
+    goto exit;
   }
-  pthread_mutex_unlock(&trace_decoder_mutex);
+
+  if (decoding_on) {
+    pthread_mutex_lock(&trace_decoder_mutex);
+    while (!decoder_ready) {
+      pthread_cond_wait(&trace_decoder_cond, &trace_decoder_mutex);
+    }
+    pthread_mutex_unlock(&trace_decoder_mutex);
+  }
 
 exit:
   return ret;
