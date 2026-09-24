@@ -185,7 +185,10 @@ int init_etm(cs_device_t dev)
   v4config.eventctlr0r = 0; /* disable all event tracing */
   v4config.eventctlr1r = 0;
   /* config */
-  v4config.stallcrlr = 0x2100; /* NOOVERFLOW */
+  /* Stall the core instead of overflowing. NOOVERFLOW (bit 13) is not
+   * implemented on the A53 ETM (TRCIDR3.NOOVERFLOW=0), only STALLCTL is:
+   * ISTALL with the most invasive LEVEL keeps the trace lossless */
+  v4config.stallcrlr = (1 << 8) | (3 << 2); /* ISTALL, LEVEL=3 */
   /* TRCSYNCPR.PERIOD: 0 is no periodic sync, N is an A-Sync every 2^N bytes */
   char *syncpr_str = getenv("AFLCS_ETM_SYNCPR");
   unsigned int syncpr = 0;
