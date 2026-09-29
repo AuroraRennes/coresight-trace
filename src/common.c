@@ -595,8 +595,14 @@ static int enable_cs_trace(pid_t pid)
   pthread_mutex_lock(&trace_mutex);
 
   if (is_first_trace) {
-    /* Do not specify traced PID in forkserver mode */
+    /* Do not specify traced PID in forkserver mode, except for the Stalker
+     * backend, which rewrites it per exec (see set_etm_trace_pid()) */
+#ifdef AFLCS_STALKER_DECODER
+    set_etm_trace_pid(child_pid);
+    if (configure_trace(board, &devices, map_info, range_count, child_pid) < 0) {
+#else
     if (configure_trace(board, &devices, map_info, range_count, pid) < 0) {
+#endif
       fprintf(stderr, "configure_trace() failed\n");
       goto exit;
     }
@@ -618,6 +624,7 @@ static int enable_cs_trace(pid_t pid)
     }
   } else {
     /* Enable trace sinks only once ETMs enabled */
+    set_etm_trace_pid(child_pid);
     if (enable_trace_sinks_only(board, &devices) < 0) {
       fprintf(stderr, "enable_trace_sinks_only() failed\n");
       goto exit;

@@ -51,6 +51,7 @@ int stalker_fini(void);
 /* Restrict the ETM's ViewInst-Include filter to range[0], the tracee itself.
  * See stalker.c for why. */
 void stalker_configure_addr_range(struct map_info *range,
-                                  cs_etmv4_config_t *tconfig);
+                                  cs_etmv4_config_t *tconfig,
+                                  unsigned int acc_type_ex);
 
 #endif /* CS_TRACE_STALKER_H */

@@ -24,6 +24,7 @@ int set_etr_formatter_bypass(struct cs_devices_t *devices, bool disable_formatte
 int enable_trace(const struct board *board, struct cs_devices_t *devices);
 int disable_trace(const struct board *board, struct cs_devices_t *devices);
 int enable_trace_sinks_only(const struct board *board, struct cs_devices_t *devices);
+void set_etm_trace_pid(pid_t pid);
 int disable_trace_sinks_only(const struct board *board, struct cs_devices_t *devices);
 
 #endif /* CS_TRACE_CONFIG_H */

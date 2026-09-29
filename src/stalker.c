@@ -125,14 +125,15 @@ int stalker_fini(void)
 }
 
 void stalker_configure_addr_range(struct map_info *range,
-                                  cs_etmv4_config_t *tconfig)
+                                  cs_etmv4_config_t *tconfig,
+                                  unsigned int acc_type_ex)
 {
   /* This decoder has no per-library disambiguation, so config.c's default
    * loop over every mapped range would fold libc and ld.so into the coverage
    * hash and inflate trace volume enough to overflow the ETR. Filter on the
    * main binary only, matching stalker_decoder_init()'s map_info[idx] match.
    * map_info[] itself is untouched. */
-  set_etmv4_addr_range(&range[0], &tconfig->addr_comps[0], 0);
+  set_etmv4_addr_range(&range[0], &tconfig->addr_comps[0], acc_type_ex);
   tconfig->addr_comps_acc_mask |= 0x3;
   tconfig->viiectlr |= 1;
 }

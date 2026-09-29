@@ -10,6 +10,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <stdbool.h>
 #include <assert.h>
 #include <limits.h>
@@ -31,6 +32,35 @@ const bool return_stack = false;
 extern unsigned long etr_ram_addr;
 extern size_t etr_ram_size;
 extern int registration_verbose;
+
+#ifdef AFLCS_STALKER_DECODER
+/* PID the address range is gated on, rewritten into TRCCIDCVR0 at every
+ * window's ETM cycle: configure_trace() runs once, but each exec is a new
+ * fork. Without the gate any process on the trace CPU whose code falls in
+ * the range is traced as the target (every PIE shares 0xaaaaaaaa0000 with
+ * ASLR off). AFLCS_PID_FILTER=0 disables it. */
+static pid_t traced_pid = -1;
+
+static bool pid_filter_enabled(void)
+{
+  static int enabled = -1;
+
+  if (enabled < 0) {
+    const char *ptr = getenv("AFLCS_PID_FILTER");
+    enabled = !(ptr && !strcmp(ptr, "0"));
+  }
+  return enabled;
+}
+#endif
+
+void set_etm_trace_pid(pid_t pid)
+{
+#ifdef AFLCS_STALKER_DECODER
+  traced_pid = pid;
+#else
+  (void)pid;
+#endif
+}
 
 void cs_etb_flush_and_wait_stop(struct cs_devices_t *devices)
 {
@@ -120,7 +150,12 @@ static int configure_etmv4_addr_range_cid(cs_device_t etm,
   }
 
 #ifdef AFLCS_STALKER_DECODER
-  stalker_configure_addr_range(range, &tconfig);
+  /* Match the range only while CONTEXTIDR (the PID, PID_IN_CONTEXTIDR=y)
+   * equals context ID comparator 0 */
+  stalker_configure_addr_range(range, &tconfig,
+                               (cid > 0 && pid_filter_enabled())
+                                   ? CS_ETMV4_ACATR_CTXT | CS_ETMV4_ACATR_CTXTID(0)
+                                   : 0);
 #else
   for (int i = 0; i < range_count; i++) {
       set_etmv4_addr_range(&range[i], &tconfig.addr_comps[i * 2], 0);
@@ -476,8 +511,14 @@ int enable_trace_sinks_only(const struct board *board, struct cs_devices_t *devi
 #ifdef AFLCS_STALKER_DECODER
   /* Sinks-only leaves the ETM free-running, so a capture can begin mid-stream
    * with no A-Sync. Force a real cycle so every window has a sync point.  With
-   * TRCSYNCPR.PERIOD at 0 this is the only sync guarantee. */
+   * TRCSYNCPR.PERIOD at 0 this is the only sync guarantee. The ETM is still
+   * in programming mode from disable_trace_sinks_only(), so this is also where
+   * the new child's PID goes into the context ID comparator. */
   for (i = 0; i < board->n_cpu; ++i) {
+    if (traced_pid > 0 && pid_filter_enabled()) {
+      cs_device_write(devices->ptm[i], CS_ETMV4_CIDCVR(0), (uint32_t)traced_pid);
+      cs_device_write(devices->ptm[i], CS_ETMV4_CIDCVR(0) + 4, 0);
+    }
     cs_trace_enable(devices->ptm[i]);
   }
 #endif
