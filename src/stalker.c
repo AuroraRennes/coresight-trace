@@ -61,7 +61,8 @@ static void stalker_debug_report(const unsigned char *trace_bitmap,
           st.text_end_addr);
 }
 
-int stalker_setup(pid_t pid, struct map_info *map_info, int map_info_num)
+int stalker_setup(pid_t pid, struct map_info *map_info, int map_info_num,
+                  int trace_id)
 {
   /* initialize decoder */
   if (stalker_decoder_init(pid, map_info, map_info_num) < 0) {
@@ -73,6 +74,8 @@ int stalker_setup(pid_t pid, struct map_info *map_info, int map_info_num)
   const char *dump = getenv("AFLCS_STALKER_DUMP_BYTES");
   stalker_dump_limit = dump ? (size_t)atoi(dump) : 0;
   stalker_diag = getenv("AFLCS_STALKER_DIAG") != NULL;
+
+  stalker_decoder_set_trace_id(trace_id);
 
   /* bb_mode=0 to match the ETM by default (reprogrammed by the proxy) */
   stalker_decoder_set_bb_mode(0);

@@ -924,7 +924,7 @@ int init_trace(pid_t parent_pid, pid_t pid)
       goto exit;
     }
 #ifdef AFLCS_STALKER_DECODER
-    if (stalker_setup(pid, map_info, range_count) < 0) {
+    if (stalker_setup(pid, map_info, range_count, trace_id) < 0) {
       fprintf(stderr, "stalker_setup() failed\n");
       goto exit;
     }

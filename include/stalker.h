@@ -29,8 +29,10 @@
 #define STALKER_DECODER_HANDLE ((void *)0x1)
 
 /* Resolve the tracee's text range once, by matching /proc/<pid>/exe against
- * map_info[], and set the initial bb_mode=0 the ETM resets to. */
-int stalker_setup(pid_t pid, struct map_info *map_info, int map_info_num);
+ * map_info[], set the initial bb_mode=0 the ETM resets to, and restrict
+ * decoding to the traced CPU's trace_id. */
+int stalker_setup(pid_t pid, struct map_info *map_info, int map_info_num,
+                  int trace_id);
 
 /* Keep the decoder's bb_mode in sync with the hardware ETM toggle.
  * 0 = atom/path (sdbm hash), 1 = branch broadcast (address-based hash). */
