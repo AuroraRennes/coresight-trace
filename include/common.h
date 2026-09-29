@@ -11,6 +11,7 @@
 typedef enum {
   edge_cov,
   path_cov,
+  hybrid_cov,
 } cov_type_t;
 
 int fetch_trace(void);

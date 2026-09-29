@@ -16,6 +16,7 @@
 #include "common.h"
 #ifdef AFLCS_STALKER_DECODER
 #include "freq_gov.h"
+#include "hybrid.h"
 #endif
 
 #include <stdio.h>
@@ -74,7 +75,8 @@ char *ld_forksrv_path;
 #ifdef AFLCS_STALKER_DECODER
 static freq_mode_t current_freq_mode(void)
 {
-  return (cov_type == path_cov) ? FREQ_MODE_ATOM : FREQ_MODE_ADDR;
+  /* Hybrid's main pass is the path one */
+  return (cov_type == edge_cov) ? FREQ_MODE_ADDR : FREQ_MODE_ATOM;
 }
 #endif
 
@@ -349,6 +351,28 @@ static s32 retry_child(freq_mode_t mode)
 
   return pid;
 }
+
+/* Hybrid's second pass: re-run the input once with branch broadcast at the
+ * addr pass's frequency, with no overflow retry, as upstream's
+ * save_if_interesting(). The path pass's status stays the one reported. */
+static int confirm_with_branch_broadcast(void)
+{
+  int overflowed;
+
+  if (trace_set_bb_mode(1) < 0) return -1;
+  if (retry_child(FREQ_MODE_ADDR) < 0) return -1;
+  if (wait_for_child_and_stop_trace(NULL) < 0) return -1;
+  freq_gov_restore_max();
+
+  overflowed = trace_did_overflow();
+  total_exec_count++;
+  if (overflowed) overflow_exec_count++;
+  freq_gov_on_result(FREQ_MODE_ADDR, overflowed);
+
+  hybrid_after_confirm(trace_bitmap, overflowed);
+
+  return trace_set_bb_mode(0);
+}
 #endif /* AFLCS_STALKER_DECODER */
 
 static u32 __afl_next_testcase(void)
@@ -372,6 +396,7 @@ static u32 __afl_next_testcase(void)
 
 #ifdef AFLCS_STALKER_DECODER
     freq_gov_init(trace_cpu, cov_type == edge_cov);
+    if (cov_type == hybrid_cov) hybrid_init(trace_bitmap_size);
 #endif
   }
 
@@ -385,7 +410,17 @@ static u32 __afl_next_testcase(void)
      * child per step, stopping at the first overflow. The ramp's first step
      * consumes the child the forkserver just handed us. */
     struct calib_ctx ctx = { .child_pid = child_pid, .have_child = 1 };
-    did_calibrate = freq_gov_calibrate(mode, calibration_run_one_shot, &ctx) > 0;
+    if (cov_type == hybrid_cov) {
+      /* Stalker ramps the addr pass alone (hybrid starts with bb_mode=1) and
+       * starts the path pass where it settled */
+      if (trace_set_bb_mode(1) < 0) FATAL("Failed to enable branch broadcast");
+      did_calibrate =
+          freq_gov_calibrate(FREQ_MODE_ADDR, calibration_run_one_shot, &ctx) > 0;
+      freq_gov_copy_start(FREQ_MODE_ATOM, FREQ_MODE_ADDR);
+      if (trace_set_bb_mode(0) < 0) FATAL("Failed to disable branch broadcast");
+    } else {
+      did_calibrate = freq_gov_calibrate(mode, calibration_run_one_shot, &ctx) > 0;
+    }
   }
 
   /* Activate branch broadcast for enable */
@@ -507,6 +542,11 @@ int main(int argc, char *argv[])
       cov_type = edge_cov;
     } else if (!strcmp(ptr, "path")) {
       cov_type = path_cov;
+    } else if (!strcmp(ptr, "hybrid")) {
+#ifndef AFLCS_STALKER_DECODER
+      FATAL("AFLCS_COV=hybrid needs the Stalker backend (STALKER_DECODER=1)");
+#endif
+      cov_type = hybrid_cov;
     } else {
       FATAL("Error: unknown coverage type '%s'", ptr);
     }
@@ -568,6 +608,13 @@ int main(int argc, char *argv[])
       }
 
       break;
+    }
+
+    /* Hybrid: a crash or timeout keeps its path map, as upstream only runs the
+     * path/edge logic on fault == crash_mode */
+    if (cov_type == hybrid_cov && decoding_on && !WIFSIGNALED(status) &&
+        hybrid_after_path(trace_bitmap, overflowed) == HYBRID_CONFIRM) {
+      if (confirm_with_branch_broadcast() < 0) return -1;
     }
 #else
     if (wait_for_child_and_stop_trace(&status) < 0) return -1;

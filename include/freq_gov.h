@@ -52,4 +52,8 @@ void freq_gov_force_min(void);
  * would re-run at the frequency just used and learn nothing. */
 int freq_gov_at_floor(freq_mode_t mode);
 
+/* Start `dst` where `src` settled. Hybrid calibrates the addr pass only and
+ * seeds the path pass with its result, as Stalker's cpu_frequency_analysis() */
+void freq_gov_copy_start(freq_mode_t dst, freq_mode_t src);
+
 #endif /* CS_TRACE_FREQ_GOV_H */

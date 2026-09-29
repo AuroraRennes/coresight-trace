@@ -566,3 +566,8 @@ int freq_gov_at_floor(freq_mode_t mode)
 {
   return !g_enabled || cur_idx[mode] == 0;
 }
+
+void freq_gov_copy_start(freq_mode_t dst, freq_mode_t src)
+{
+  cur_idx[dst] = cur_idx[src];
+}

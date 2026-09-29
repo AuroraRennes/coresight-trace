@@ -497,6 +497,8 @@ static int fini_decoder(void)
     case path_cov:
       libcsdec_finish_path(decoder);
       break;
+    default:
+      break;
   }
 
   return 0;

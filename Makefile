@@ -69,6 +69,7 @@ ifneq ($(strip $(STALKER_DECODER)),)
     $(STALKER_DEC_BASE)/stalker_adapter.o \
     src/stalker.o \
     src/freq_gov.o \
+    src/hybrid.o \
 
   # DECODER_VERBOSE=1 restores the decoder's per-packet dump and its error/progress logging,
   # compiled out by default because it is in the hot path
