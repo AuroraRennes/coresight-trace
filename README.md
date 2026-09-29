@@ -99,7 +99,7 @@ This runs `$(TRACEE)` (`tests/fib` by default) as a trace target under `trace/$(
 coresight-trace uses [RICSec/coresight-decoder](https://github.com/RICSecLab/coresight-decoder), a new CoreSight trace decoder optimized for fuzzing feedback. It currently supports AFL-style edge coverage and [PTrix](https://github.com/junxzm1990/afl-pt)-style path coverage. Refer to the [coresight-decoder README](https://github.com/RICSecLab/coresight-decoder/blob/master/README.md) for further infomation.
 
 
-### Deferred forkserver 
+### Deferred forkserver
 
 See the example from the [tests/def_forksrv](tests/def_forksrv)
 
@@ -107,7 +107,7 @@ See the example from the [tests/def_forksrv](tests/def_forksrv)
 
 cs-trace, running with the `-d edge` and `-l` options, can save the instruction execution stream to a file in the current directory.
 
-For example, after running the command: 
+For example, after running the command:
 
 ```
 CS_TRACE_LIB=libc-2.27.so ./cs-trace --decoding=edge -l  -- tests/fib
@@ -129,6 +129,38 @@ libc-2.27.so+20758
 ```
 
 This file stores the instruction execution stream in `Module + Offset (modoff)` format, which is suitable for the [lighthouse plugin](https://github.com/gaasedelen/lighthouse/tree/master).
+
+### Stalker decoder backend
+
+An alternative decode backend, ported from [Stalker](https://github.com/AuroraRennes/Stalker) (Yue et al., RAID'24), is available as an opt-in build:
+
+```bash
+DEFAULT_BOARD="Your Target Board" STALKER_DECODER=1 make
+```
+
+This links the vendored decoder in [stalker-decoder](stalker-decoder) (a fork of `ptm2human`) instead of using coresight-decoder for feedback. It is opt-in because that decoder is GPLv2, the default build links none of it. Add `DECODER_VERBOSE=1` to re-enable the decoder's own packet logging.
+
+#### Environment variables
+
+| Variable | Applies to | Meaning |
+|---|---|---|
+| `AFLCS_COV` | always | Coverage type: `edge` (branch broadcast, one bitmap byte per taken branch), `path` (atom-chained path hash), or `hybrid` (Stalker backend only: each input runs in path mode, and inputs with a new path are re-run in edge mode, whose map is the one AFL++ sees). |
+| `AFLCS_NO_DECODER` | always | Skip decoding entirely; report a constant bitmap. For measuring tracing overhead alone. |
+| `AFLCS_REG_VERBOSE` | always | Log CoreSight register accesses during setup. |
+| `AFLCS_ETM_SYNCPR` | always | Set `TRCSYNCPR.PERIOD` (A-Sync every 2^N bytes). Defaults to 0, no periodic A-Sync. |
+| `AFLCS_BB_VERIFY` | Stalker backend | Read back the branch-broadcast config register after writing it. |
+| `AFLCS_STALKER_DIAG` | Stalker backend | Per-exec diagnostics: overflow rate, bitmap hash and nonzero-byte count. |
+| `AFLCS_STALKER_DUMP_BYTES` | Stalker backend | Hex-dump the first N captured trace bytes per exec. |
+| `AFLCS_STALKER_ADDRTRACE` | Stalker backend | Dump the first N reconstructed address packets (read by the decoder itself). |
+| `AFLCS_FREQ_CALIBRATE` | always | Set to `0` to skip the upfront frequency-calibration ramp. On by default, matching Stalker's `cpu_frequency_analysis()`. The ramp costs one exec per available CPU frequency and is usually inert, since seeds rarely overflow. |
+| `AFLCS_FREQ_GOV` | Stalker backend | Set to `0` to disable the frequency governor: the CPU policy is left untouched, with no calibration, no overflow retries and no forced-minimum run. |
+| `AFLCS_EXPORT_ON_DECODE_FAIL` | coresight-decoder backend | Export each trace the decoder rejects as `cstrace-<n>.bin` + `decoderargs-<n>.txt` in the working directory, for offline replay with `coresight-decoder/processor`. |
+| `AFLCS_PID_FILTER` | Stalker backend | Set to `0` to trace the address range for every process, not only the current child. On by default: the child's PID is written to the ETMs' context ID comparator at every exec, so other processes mapped at the same addresses (every PIE binary, with ASLR off) are not traced. |
+| `AFLCS_FREQ_DIAG` | always | Log every CPU frequency write with its origin (calibrate/apply/force_min/restore_max) and every step up or down. |
+
+`AFLCS_STALKER_DIAG`, `AFLCS_STALKER_DUMP_BYTES`, `AFLCS_STALKER_ADDRTRACE` and `AFLCS_FREQ_DIAG` are debugging aids and are off the hot path when unset. All of them write to the proxy's stderr, which AFL++ discards unless `AFL_DEBUG_CHILD=1` is set.
+
+The frequency governor writes `scaling_min_freq`/`scaling_max_freq` and restores the policy it found on exit, including when the proxy is killed.
 
 ## Limitations
 
