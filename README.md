@@ -151,6 +151,7 @@ This links the vendored decoder in [stalker-decoder](stalker-decoder) (a fork of
 | `AFLCS_ETM_STALLCRLR` | always | Set `TRCSTALLCTLR` (hex or decimal). Defaults to `0x2100` (upstream) on the armored backend and `0` (no stall) on Stalker. `0x10c` is ISTALL at level 3, the tuned setting. |
 | `AFLCS_STALKER_EXC_SNAPSHOT` | Stalker backend | `1` snapshots the decoder state on an exception and restores it on return (tuned). Defaults to `0`, the artifact's handling. |
 | `AFLCS_TRUNCATE_ON_OVERFLOW` | armored backend | `1` stops decoding at an ETM Overflow packet (tuned). Defaults to `0`, upstream's decoding across the gap. |
+| `AFLCS_RESYNC_ON_LEFTOVER` | armored backend | `1` skips leftover bytes of a cut ETM preamble at the start of a window and resyncs on the next A-Sync or in-range long address (tuned). Defaults to `0`, upstream's rejection of the trace. |
 | `AFLCS_BB_VERIFY` | Stalker backend | Read back the branch-broadcast config register after writing it. |
 | `AFLCS_STALKER_DIAG` | Stalker backend | Per-exec diagnostics: overflow rate, bitmap hash and nonzero-byte count. |
 | `AFLCS_STALKER_DUMP_BYTES` | Stalker backend | Hex-dump the first N captured trace bytes per exec. |
