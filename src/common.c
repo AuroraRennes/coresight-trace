@@ -279,9 +279,11 @@ static void *decoder_worker(void *arg)
    * pause it to drain. Overflow is the frequency governor's job */
   decoding_threshold = ULONG_MAX;
 #else
-  /* Base coresight mode: drain against whichever sink is actually the
-   * bottleneck. */
-  if (devices.trace_sinks[0]) {
+  /* Upstream drains at the ETR size, "to avoid pausing the tracing".
+   * AFLCS_DRAIN_AT_2XETF=1 (tuned) drains against whichever sink is actually
+   * the bottleneck: twice the ETF when it is the smaller one. */
+  const char *drain_str = getenv("AFLCS_DRAIN_AT_2XETF");
+  if (drain_str && atoi(drain_str) != 0 && devices.trace_sinks[0]) {
     etf_ram_size = (size_t)cs_get_buffer_size_bytes(devices.trace_sinks[0]);
     if (etf_ram_size < etr_ram_size) {
       decoding_threshold = etf_ram_size * 2;

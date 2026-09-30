@@ -212,8 +212,22 @@ int init_etm(cs_device_t dev)
   cs_etm_config_get_ex(dev, &v4config);
   v4config.flags |= CS_ETMC_TRACE_ENABLE | CS_ETMC_EVENTSELECT;
   /* trace enable */
-  v4config.victlr = CS_ETMV4_VICTLR_ExEL0_S | CS_ETMV4_VICTLR_ExEL1_S | CS_ETMV4_VICTLR_ExEL2_S | CS_ETMV4_VICTLR_ExEL3_S |
-    CS_ETMV4_VICTLR_ExEL1_NS | CS_ETMV4_VICTLR_ExEL2_NS | CS_ETMV4_VICTLR_SSSTATUS | CS_ETMV4_VICTLR_ALWAYS ;
+  /* TRCVICTLR. Defaults are each backend's original: upstream's 0x201 (trace
+   * all, start/stop started, no exception level excluded; the address range
+   * comparators, EL0 non-secure only, keep the kernel out), and non-secure EL0
+   * only for Stalker, as the artifact's EXCL_KERN. AFLCS_ETM_VICTLR overrides;
+   * 0x6f0201 (non-secure EL0 only) is the tuned armored setting */
+  char *victlr_str = getenv("AFLCS_ETM_VICTLR");
+#ifdef AFLCS_STALKER_DECODER
+  unsigned int victlr = CS_ETMV4_VICTLR_ExEL0_S | CS_ETMV4_VICTLR_ExEL1_S |
+                        CS_ETMV4_VICTLR_ExEL2_S | CS_ETMV4_VICTLR_ExEL3_S |
+                        CS_ETMV4_VICTLR_ExEL1_NS | CS_ETMV4_VICTLR_ExEL2_NS |
+                        CS_ETMV4_VICTLR_SSSTATUS | CS_ETMV4_VICTLR_ALWAYS;
+#else
+  unsigned int victlr = CS_ETMV4_VICTLR_SSSTATUS | CS_ETMV4_VICTLR_ALWAYS;
+#endif
+  if (victlr_str) victlr = (unsigned int)strtoul(victlr_str, NULL, 0);
+  v4config.victlr = victlr;
   v4config.viiectlr = 0;   /* no address range */
   v4config.vissctlr = 0;   /* no start stop points */
   /* event select */

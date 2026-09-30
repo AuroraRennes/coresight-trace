@@ -149,6 +149,8 @@ This links the vendored decoder in [stalker-decoder](stalker-decoder) (a fork of
 | `AFLCS_REG_VERBOSE` | always | Log CoreSight register accesses during setup. |
 | `AFLCS_ETM_SYNCPR` | always | Set `TRCSYNCPR.PERIOD` (A-Sync every 2^N bytes). Defaults to 0, no periodic A-Sync. |
 | `AFLCS_ETM_STALLCRLR` | always | Set `TRCSTALLCTLR` (hex or decimal). Defaults to `0x2100` (upstream) on the armored backend and `0` (no stall) on Stalker. `0x10c` is ISTALL at level 3, the tuned setting. |
+| `AFLCS_ETM_VICTLR` | always | Set `TRCVICTLR` (hex or decimal). Defaults to `0x201` (upstream: no exception level excluded) on the armored backend and `0x6f0201` (non-secure EL0 only) on Stalker. `0x6f0201` is the tuned armored setting. |
+| `AFLCS_DRAIN_AT_2XETF` | armored backend | `1` pauses the target to drain the trace at twice the ETF size when the ETF is smaller than the ETR (tuned). Defaults to `0`, upstream's drain at the ETR size. |
 | `AFLCS_STALKER_EXC_SNAPSHOT` | Stalker backend | `1` snapshots the decoder state on an exception and restores it on return (tuned). Defaults to `0`, the artifact's handling. |
 | `AFLCS_TRUNCATE_ON_OVERFLOW` | armored backend | `1` stops decoding at an ETM Overflow packet (tuned). Defaults to `0`, upstream's decoding across the gap. |
 | `AFLCS_RESYNC_ON_LEFTOVER` | armored backend | `1` skips leftover bytes of a cut ETM preamble at the start of a window and resyncs on the next A-Sync or in-range long address (tuned). Defaults to `0`, upstream's rejection of the trace. |
