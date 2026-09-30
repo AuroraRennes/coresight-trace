@@ -275,8 +275,9 @@ static void *decoder_worker(void *arg)
   }
 
 #ifdef AFLCS_STALKER_DECODER
-  /* Stalker lets the child run completely */
-  decoding_threshold = etr_ram_size / 2;
+  /* Stalker lets the child run completely and decodes once after exit: never
+   * pause it to drain. Overflow is the frequency governor's job */
+  decoding_threshold = ULONG_MAX;
 #else
   /* Base coresight mode: drain against whichever sink is actually the
    * bottleneck. */

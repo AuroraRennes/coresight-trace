@@ -148,6 +148,9 @@ This links the vendored decoder in [stalker-decoder](stalker-decoder) (a fork of
 | `AFLCS_NO_DECODER` | always | Skip decoding entirely; report a constant bitmap. For measuring tracing overhead alone. |
 | `AFLCS_REG_VERBOSE` | always | Log CoreSight register accesses during setup. |
 | `AFLCS_ETM_SYNCPR` | always | Set `TRCSYNCPR.PERIOD` (A-Sync every 2^N bytes). Defaults to 0, no periodic A-Sync. |
+| `AFLCS_ETM_STALLCRLR` | always | Set `TRCSTALLCTLR` (hex or decimal). Defaults to `0x2100` (upstream) on the armored backend and `0` (no stall) on Stalker. `0x10c` is ISTALL at level 3, the tuned setting. |
+| `AFLCS_STALKER_EXC_SNAPSHOT` | Stalker backend | `1` snapshots the decoder state on an exception and restores it on return (tuned). Defaults to `0`, the artifact's handling. |
+| `AFLCS_TRUNCATE_ON_OVERFLOW` | armored backend | `1` stops decoding at an ETM Overflow packet (tuned). Defaults to `0`, upstream's decoding across the gap. |
 | `AFLCS_BB_VERIFY` | Stalker backend | Read back the branch-broadcast config register after writing it. |
 | `AFLCS_STALKER_DIAG` | Stalker backend | Per-exec diagnostics: overflow rate, bitmap hash and nonzero-byte count. |
 | `AFLCS_STALKER_DUMP_BYTES` | Stalker backend | Hex-dump the first N captured trace bytes per exec. |

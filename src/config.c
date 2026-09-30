@@ -220,10 +220,19 @@ int init_etm(cs_device_t dev)
   v4config.eventctlr0r = 0; /* disable all event tracing */
   v4config.eventctlr1r = 0;
   /* config */
-  /* Stall the core instead of overflowing. NOOVERFLOW (bit 13) is not
-   * implemented on the A53 ETM (TRCIDR3.NOOVERFLOW=0), only STALLCTL is:
-   * ISTALL with the most invasive LEVEL keeps the trace lossless */
-  v4config.stallcrlr = (1 << 8) | (3 << 2); /* ISTALL, LEVEL=3 */
+  /* TRCSTALLCTLR. Defaults are each backend's original: upstream's 0x2100
+   * (NOOVERFLOW, not implemented on the A53, plus ISTALL at level 0), and no
+   * stall for Stalker, which leaves overflow to the frequency governor.
+   * AFLCS_ETM_STALLCRLR overrides; 0x10c (ISTALL, LEVEL=3) is the lossless
+   * setting of the tuned baselines */
+  char *stall_str = getenv("AFLCS_ETM_STALLCRLR");
+#ifdef AFLCS_STALKER_DECODER
+  unsigned int stallcrlr = 0;
+#else
+  unsigned int stallcrlr = 0x2100;
+#endif
+  if (stall_str) stallcrlr = (unsigned int)strtoul(stall_str, NULL, 0);
+  v4config.stallcrlr = stallcrlr;
   /* TRCSYNCPR.PERIOD: 0 is no periodic sync, N is an A-Sync every 2^N bytes */
   char *syncpr_str = getenv("AFLCS_ETM_SYNCPR");
   unsigned int syncpr = 0;
