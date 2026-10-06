@@ -508,9 +508,99 @@ static int fini_decoder(void)
 #endif
 }
 
+/* AFLCS_ETR_DIRECT_READ: copy the trace straight out of the ETR's u-dma-buf
+ * instead of through CSAL's cs_get_trace_data(), which reads it one 32-bit
+ * word at a time through the RRD register, and keep the trace buffer across
+ * executions instead of mapping fresh pages for each one. Defaults are each
+ * backend's original: on for Stalker, whose artifact maps the ETR memory once
+ * (/dev/mem) and decodes from it, off for armored, whose upstream uses the RRD
+ * loop and a new mapping per execution. */
+static const unsigned char *etr_map = NULL;
+
+static bool etr_direct_read_enabled(void)
+{
+  static int enabled = -1;
+
+  if (enabled < 0) {
+    const char *ptr = getenv("AFLCS_ETR_DIRECT_READ");
+#ifdef AFLCS_STALKER_DECODER
+    enabled = !(ptr && !strcmp(ptr, "0"));
+#else
+    enabled = ptr && strcmp(ptr, "0");
+#endif
+  }
+  return enabled;
+}
+
+/* The buffer is not DMA-coherent: O_SYNC makes u-dma-buf map it uncached, so
+ * reads see what the ETR wrote without a cache sync */
+static int etr_map_open(void)
+{
+  char path[PATH_MAX];
+  int fd;
+  void *p;
+
+  snprintf(path, sizeof(path), "/dev/udmabuf%d", udmabuf_num);
+  if ((fd = open(path, O_RDONLY | O_SYNC)) < 0) {
+    perror("open u-dma-buf");
+    return -1;
+  }
+  p = mmap(NULL, etr_ram_size, PROT_READ, MAP_SHARED, fd, 0);
+  close(fd);
+  if (p == MAP_FAILED) {
+    perror("mmap u-dma-buf");
+    return -1;
+  }
+  etr_map = p;
+  return 0;
+}
+
+/* Bytes the ETR holds, and their offset in the buffer. RRP and RWP are bus
+ * addresses; after a wrap the oldest byte is at RWP and the whole buffer is
+ * valid, as cs_get_trace_data() reads it */
+static size_t etr_pending(cs_device_t etb, size_t *start)
+{
+  uint64_t rwp = cs_device_read32x2(etb, CS_TMC_RWPHI, CS_ETB_RAM_WR_PTR);
+  uint64_t rrp;
+
+  if (rwp < etr_ram_addr || rwp >= etr_ram_addr + etr_ram_size) {
+    fprintf(stderr, "[FETCH] ERROR: ETR RWP 0x%llx outside the u-dma-buf\n",
+            (unsigned long long)rwp);
+    return 0;
+  }
+  if (cs_buffer_has_wrapped(etb)) {
+    *start = rwp - etr_ram_addr;
+    return etr_ram_size;
+  }
+  rrp = cs_device_read32x2(etb, CS_TMC_RRPHI, CS_ETB_RAM_RD_PTR);
+  if (rrp < etr_ram_addr || rrp >= etr_ram_addr + etr_ram_size) {
+    fprintf(stderr, "[FETCH] ERROR: ETR RRP 0x%llx outside the u-dma-buf\n",
+            (unsigned long long)rrp);
+    return 0;
+  }
+  *start = rrp - etr_ram_addr;
+  return rwp >= rrp ? rwp - rrp : etr_ram_size - (rrp - rwp);
+}
+
+static int etr_direct_read(void *buf, size_t len, size_t start)
+{
+  size_t first = len < etr_ram_size - start ? len : etr_ram_size - start;
+
+  memcpy(buf, etr_map + start, first);
+  memcpy((char *)buf + first, etr_map, len - first);
+  return (int)len;
+}
+
 /* FIXME: Do not initialize global variables in the function */
 static int alloc_trace_buf(void)
 {
+  /* Reuse the pages already faulted in by earlier executions */
+  if (trace_buf && etr_direct_read_enabled()) {
+    trace_buf_ptr = trace_buf;
+    decoded_trace_buf = trace_buf;
+    return 0;
+  }
+
   // Free previous mapping
   if (trace_buf) {
     munmap(trace_buf, trace_buf_size);
@@ -721,13 +811,17 @@ int fetch_trace(void)
   void *new_trace_buf;
   size_t new_trace_buf_size;
   int n;
+  bool direct;
+  size_t start = 0;
 
   ret = -1;
 
   pthread_mutex_lock(&trace_mutex);
 
   etb = devices.etb;
-  len = cs_get_buffer_unread_bytes(etb);
+  direct = etr_direct_read_enabled();
+  if (direct && !etr_map && etr_map_open() < 0) goto exit;
+  len = direct ? (int)etr_pending(etb, &start) : cs_get_buffer_unread_bytes(etb);
 
   trace_buf_ptr = (void *)ALIGN_UP((unsigned long)trace_buf_ptr, 0x8);
 
@@ -752,7 +846,11 @@ int fetch_trace(void)
     buf_remain = (size_t)((char *)trace_buf_ptr - (char *)trace_buf);
   }
 
-  n = cs_get_trace_data(etb, trace_buf_ptr, buf_remain);
+  if (direct) {
+    n = (size_t)len <= buf_remain ? etr_direct_read(trace_buf_ptr, len, start) : 0;
+  } else {
+    n = cs_get_trace_data(etb, trace_buf_ptr, buf_remain);
+  }
   if (n <= 0) {
     fprintf(stderr, "[FETCH] ERROR: failed to get trace (n=%d)\n", n);
   } else if (n < len) {
