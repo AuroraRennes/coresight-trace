@@ -37,6 +37,7 @@
 
 #define AFLCS_PROXY_NAME "afl-cs-proxy"
 #define AFLCS_FORKSRV_FD (FORKSRV_FD - 3)
+#define CS_PASS_ENV_MAX 16
 
 char *__afl_proxy_name = AFLCS_PROXY_NAME;
 
@@ -220,7 +221,23 @@ static void __afl_start_forkserver(char *argv[])
       ld_preload = append_string(ld_preload,ld_forksrv_path);
     }
 
-    char* envp[] = {"__CS_PROXY=1", ld_preload, ld_library_path, NULL};
+    /* The target gets a fresh environment. CS_PASS_ENV names the variables
+     * (colon-separated) to carry over from ours, e.g. a data directory the
+     * target cannot be pointed at through its arguments. */
+    char *envp[3 + CS_PASS_ENV_MAX + 1] = {"__CS_PROXY=1", ld_preload,
+                                           ld_library_path, NULL};
+    char *cs_pass_env = getenv("CS_PASS_ENV");
+    if (cs_pass_env != NULL) {
+      int n = 3;
+      char *names = strdup(cs_pass_env);
+      for (char *name = strtok(names, ":"); name; name = strtok(NULL, ":")) {
+        char *value = getenv(name);
+        if (value == NULL) continue;
+        if (n - 3 == CS_PASS_ENV_MAX) FATAL("CS_PASS_ENV: too many variables\n");
+        envp[n++] = append_string(append_string(name, "="), value);
+      }
+      envp[n] = NULL;
+    }
 
     DEBUGF("Try run target: %s \n with envp=\n", argv[0]);
       for (int i = 0; envp[i] != NULL; i++) {
