@@ -162,6 +162,7 @@ This links the vendored decoder in [stalker-decoder](stalker-decoder) (a fork of
 | `AFLCS_FREQ_GOV` | Stalker backend | Set to `0` to disable the frequency governor: the CPU policy is left untouched, with no calibration, no overflow retries and no forced-minimum run. |
 | `AFLCS_EXPORT_ON_DECODE_FAIL` | coresight-decoder backend | Export each trace the decoder rejects as `cstrace-<n>.bin` + `decoderargs-<n>.txt` in the working directory, for offline replay with `coresight-decoder/processor`. |
 | `AFLCS_PID_FILTER` | both | Trace the address range only for the current child: its PID is written to the ETMs' context ID comparator at every exec, so other processes mapped at the same addresses (every PIE binary, with ASLR off) are not traced. Stalker: on by default, `0` disables it. coresight-decoder: off by default (upstream), `1` enables it and cycles the ETMs at every exec, which the comparator write needs. |
+| `AFLCS_STATS_FILE` | both | Path of a small file the proxy rewrites every 256 execs with `execs`, `overflow_execs` (execs whose trace held an Overflow packet, truncated or not) and `overflow_packets` (coresight-decoder only). Unset: no file. |
 | `AFLCS_FREQ_DIAG` | always | Log every CPU frequency write with its origin (calibrate/apply/force_min/restore_max) and every step up or down. |
 
 `AFLCS_STALKER_DIAG`, `AFLCS_STALKER_DUMP_BYTES`, `AFLCS_STALKER_ADDRTRACE` and `AFLCS_FREQ_DIAG` are debugging aids and are off the hot path when unset. All of them write to the proxy's stderr, which AFL++ discards unless `AFL_DEBUG_CHILD=1` is set.

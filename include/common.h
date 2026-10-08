@@ -23,6 +23,7 @@ int stop_trace(bool disable_all);
 void trace_suspend_resume_callback(void);
 void trace_child_exited_callback(void);
 bool trace_did_overflow(void);
+unsigned long trace_overflow_packets(void);
 int trace_set_bb_mode(int bb_mode);
 size_t trace_captured_bytes(void);
 int export_trace(const char *trace_name, const char *trace_args_name);

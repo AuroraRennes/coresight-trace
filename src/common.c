@@ -381,8 +381,16 @@ static int run_decoder(void *buf, size_t buf_size)
   }
 
   if (ret == LIBCSDEC_ERROR_OVERFLOW_PACKET) {
-    trace_overflow_occurred = true;
     fprintf(stderr, "[DECODER] overflow packet observed, truncating decode for this exec\n");
+  }
+
+  /* The decoder goes on across an Overflow packet unless told to truncate,
+   * so the return code alone does not say whether one was seen */
+  {
+    static unsigned long seen_overflow_packets = 0;
+    unsigned long n = libcsdec_overflow_packets();
+    if (n != seen_overflow_packets) trace_overflow_occurred = true;
+    seen_overflow_packets = n;
   }
 
   return (ret == LIBCSDEC_SUCCESS) ? 0 : -1;
@@ -393,6 +401,16 @@ static int run_decoder(void *buf, size_t buf_size)
 bool trace_did_overflow(void)
 {
   return trace_overflow_occurred;
+}
+
+/* Overflow packets decoded since start-up (coresight-decoder only) */
+unsigned long trace_overflow_packets(void)
+{
+#ifdef AFLCS_STALKER_DECODER
+  return 0;
+#else
+  return libcsdec_overflow_packets();
+#endif
 }
 
 /* Toggle ETM branch-broadcast mode. Must be called only while tracing is stopped */

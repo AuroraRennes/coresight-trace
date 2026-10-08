@@ -19,6 +19,7 @@
 #include "hybrid.h"
 #endif
 
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <signal.h>
@@ -50,9 +51,26 @@ u8 first_run = 1;
 u32 exec_count = 0;
 #endif
 
-#ifdef AFLCS_STALKER_DECODER
 static unsigned long long total_exec_count = 0;
 static unsigned long long overflow_exec_count = 0;
+
+/* AFLCS_STATS_FILE=PATH: keep the exec and overflow counts in PATH, rewritten
+ * every STATS_PERIOD execs (the proxy is killed, not asked to exit). */
+#define STATS_PERIOD 256
+static void write_stats(const char *path)
+{
+  char tmp[PATH_MAX];
+  FILE *fp;
+
+  snprintf(tmp, sizeof(tmp), "%s.tmp", path);
+  if ((fp = fopen(tmp, "w")) == NULL) return;
+  fprintf(fp, "execs           : %llu\noverflow_execs  : %llu\noverflow_packets: %lu\n",
+          total_exec_count, overflow_exec_count, trace_overflow_packets());
+  fclose(fp);
+  rename(tmp, path);
+}
+
+#ifdef AFLCS_STALKER_DECODER
 /* Upfront calibration, matching Stalker's cpu_frequency_analysis(). Seeds
  * rarely overflow, so the ramp is usually inert; AFLCS_FREQ_CALIBRATE=0 skips it. */
 static int needs_calibration = 1;
@@ -517,6 +535,7 @@ int main(int argc, char *argv[])
   }
 
   argvp = NULL;
+  const char *stats_file = getenv("AFLCS_STATS_FILE");
   registration_verbose = getenv("AFLCS_REG_VERBOSE") ? atoi(getenv("AFLCS_REG_VERBOSE")) : 0;
 
 #ifdef AFLCS_STALKER_DECODER
@@ -635,7 +654,11 @@ int main(int argc, char *argv[])
     }
 #else
     if (wait_for_child_and_stop_trace(&status) < 0) return -1;
+    total_exec_count++;
+    if (decoding_on && trace_did_overflow()) overflow_exec_count++;
 #endif
+
+    if (stats_file && (total_exec_count % STATS_PERIOD) == 0) write_stats(stats_file);
 
     if(!decoding_on){
       trace_bitmap[0] = 1;
