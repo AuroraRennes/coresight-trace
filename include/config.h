@@ -25,6 +25,7 @@ int enable_trace(const struct board *board, struct cs_devices_t *devices);
 int disable_trace(const struct board *board, struct cs_devices_t *devices);
 int enable_trace_sinks_only(const struct board *board, struct cs_devices_t *devices);
 void set_etm_trace_pid(pid_t pid);
+bool pid_filter_enabled(void);
 int disable_trace_sinks_only(const struct board *board, struct cs_devices_t *devices);
 
 #endif /* CS_TRACE_CONFIG_H */
