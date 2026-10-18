@@ -13,6 +13,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "stalker_adapter.h"
 
@@ -133,6 +134,32 @@ void stalker_configure_addr_range(struct map_info *range,
    * hash and inflate trace volume enough to overflow the ETR. Filter on the
    * main binary only, matching stalker_decoder_init()'s map_info[idx] match.
    * map_info[] itself is untouched. */
+
+  /* AFLCS_STALKER_EL0_VIEW=1: trace all of EL0 instead of the main binary.
+   * With the range filter, every library call leaves and re-enters the range,
+   * each time a trace-on plus an address packet with context, and bursts of
+   * them overflow the ETM (readelf's run of free() at exit). With all of EL0
+   * traced, the trace only turns on and off at context switches. Branch
+   * broadcast stays on the main binary (comparator pair 1: TRCBBCTLR RANGE
+   * bit 1, MODE bit 8 = inside), so the libraries cost atoms only, which the
+   * decoder drops. Same setup as ultrasight's addrfilter=none, bbfilter=in.
+   * Needs the PID gate, otherwise every EL0 process on the CPU is traced. */
+  const char *el0_view = getenv("AFLCS_STALKER_EL0_VIEW");
+  if (el0_view && !strcmp(el0_view, "1")) {
+    if (!acc_type_ex) {
+      fprintf(stderr, "AFLCS_STALKER_EL0_VIEW=1 needs AFLCS_PID_FILTER=1\n");
+      exit(EXIT_FAILURE);
+    }
+    /* Last EL0 address with 48-bit VAs, the comparator end is inclusive */
+    struct map_info el0 = {.start = 0, .end = 0x0000FFFFFFFFFFFFUL};
+    set_etmv4_addr_range(&el0, &tconfig->addr_comps[0], acc_type_ex);
+    set_etmv4_addr_range(&range[0], &tconfig->addr_comps[2], 0);
+    tconfig->addr_comps_acc_mask |= 0xf;
+    tconfig->viiectlr |= 1;
+    tconfig->bbctlr = (1 << 1) | (1 << 8);
+    return;
+  }
+
   set_etmv4_addr_range(&range[0], &tconfig->addr_comps[0], acc_type_ex);
   tconfig->addr_comps_acc_mask |= 0x3;
   tconfig->viiectlr |= 1;
