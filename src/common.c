@@ -626,14 +626,18 @@ static int alloc_trace_buf(void)
     trace_buf_size = 0;
   }
 
-  trace_buf = mmap(NULL, DEFAULT_TRACE_SIZE, PROT_READ | PROT_WRITE,
+  /* Size it to the ETR so one fetch always fits: upstream's 8 MiB had to grow
+   * on any exec tracing more than that (nasm hangs, some bison execs). */
+  trace_buf_size =
+      etr_ram_size > DEFAULT_TRACE_SIZE ? etr_ram_size : DEFAULT_TRACE_SIZE;
+  trace_buf = mmap(NULL, trace_buf_size, PROT_READ | PROT_WRITE,
                    MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
   if (trace_buf == MAP_FAILED) {
     perror("mmap");
     trace_buf = NULL;
+    trace_buf_size = 0;
     return -1;
   }
-  trace_buf_size = DEFAULT_TRACE_SIZE;
   trace_buf_ptr = trace_buf;
   decoded_trace_buf = trace_buf;  // both reset to same base
   return 0;
@@ -851,12 +855,15 @@ int fetch_trace(void)
 
   buf_remain =
       trace_buf_size - (size_t)((char *)trace_buf_ptr - (char *)trace_buf);
-  /* No space left in trace_buf. */
+  /* No space left in trace_buf: grow it */
   if ((size_t)len > buf_remain) {
+    buf_used = trace_buf_size - buf_remain;
     new_trace_buf_size = trace_buf_size * 2;
-    new_trace_buf = mremap(trace_buf, trace_buf_size, new_trace_buf_size, 0);
+    while (new_trace_buf_size - buf_used < (size_t)len) new_trace_buf_size *= 2;
+    new_trace_buf = mremap(trace_buf, trace_buf_size, new_trace_buf_size,
+                           MREMAP_MAYMOVE);
 
-    if (!new_trace_buf) {
+    if (new_trace_buf == MAP_FAILED) {
       perror("mremap");
       goto exit;
     }
@@ -867,7 +874,7 @@ int fetch_trace(void)
                              ((char *)trace_buf_ptr - (char *)trace_buf));
     trace_buf = new_trace_buf;
     trace_buf_size = new_trace_buf_size;
-    buf_remain = (size_t)((char *)trace_buf_ptr - (char *)trace_buf);
+    buf_remain = trace_buf_size - buf_used;
   }
 
   if (direct) {
