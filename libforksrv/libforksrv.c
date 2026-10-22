@@ -2,6 +2,7 @@
 #include <dlfcn.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <string.h>
 #include <unistd.h>
 #include <errno.h>
 
@@ -16,10 +17,42 @@
 #define FORKSRV_FD 198
 #define AFLCS_FORKSRV_FD (FORKSRV_FD - 3)
 
+/* Keep the forkserver out of the target's own children. Every testcase is
+ * forked from this process, so they all start from the cleaned environment.
+ * A child that inherited __CS_PROXY and this preload (bison's m4) would start
+ * a forkserver of its own, find the descriptors closed and _exit(-1) before
+ * reading its input. */
+static void scrub_forksrv_env(void) {
+    Dl_info info;
+    char *preload = getenv("LD_PRELOAD");
+
+    unsetenv("__CS_PROXY");
+    if (preload == NULL || !dladdr((void *)scrub_forksrv_env, &info) ||
+        info.dli_fname == NULL) {
+        return;
+    }
+
+    /* cs-proxy appends the path with no separator, remove it as a substring */
+    size_t len = strlen(info.dli_fname);
+    char *rest = strdup(preload);
+    char *hit;
+    if (rest == NULL) return;
+    while ((hit = strstr(rest, info.dli_fname)) != NULL) {
+        memmove(hit, hit + len, strlen(hit + len) + 1);
+    }
+    if (rest[strspn(rest, ": ")] == '\0') {
+        unsetenv("LD_PRELOAD");
+    } else {
+        setenv("LD_PRELOAD", rest, 1);
+    }
+    free(rest);
+}
+
 void __cs_start_forkserver(void) {
     if(getenv("__CS_PROXY") != NULL) {
         /* CS-PROXY */
         fprintf(stdout, "Start forksrv\n");
+        scrub_forksrv_env();
     } else {
         /* CS-TRACE */
         if(getenv("__CS_TRACE") != NULL) {
