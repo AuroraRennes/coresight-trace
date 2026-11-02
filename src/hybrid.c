@@ -49,11 +49,12 @@
 
 static size_t map_size;
 
-static unsigned char *virgin_atom, *virgin_atom_real, *virgin_edge;
+static unsigned char *virgin_atom, *virgin_atom_real, *virgin_edge, *virgin_missed;
 static unsigned char *path_cls, *path_kept, *edge_cls;
 static uint32_t path_kept_cksum;
 static int path_kept_overflow;
 static uint64_t path_kept_input;
+static int last_filtered;  /* the last discard came from the checksum filter */
 
 /* Upstream atom_check_up/down: a checksum is filtered once both of its halves
  * have been marked, i.e. a crude two-table Bloom filter */
@@ -74,10 +75,14 @@ static unsigned long long pre_real_execs, pre_virgin_bits;
 static unsigned long long purge_interval = PURGE_INTERVAL_LEVEL1;
 static unsigned long long purge_attempt, purge_real;
 
-/* AFLCS_STALKER_DIAG */
+/* AFLCS_STALKER_DIAG and hybrid_write_stats() */
 static int diag;
-static unsigned long long n_filtered, n_confirmed, n_new_edges, n_cache_hits;
-static unsigned long long n_input_hits, n_empty;
+static unsigned long long n_filtered, n_old_path, n_confirmed, n_new_edges, n_cache_hits;
+static unsigned long long n_new_tuples, n_input_hits, n_empty;
+
+/* AFLCS_HYBRID_SAMPLE: discards re-run with branch broadcast */
+static unsigned long long n_sampled, n_sample_overflow, n_sample_new, n_sample_new_tuples;
+static unsigned long long n_sample_new_filtered;
 
 static const unsigned char count_class[256] = {
   [0] = 0, [1] = 1, [2] = 2, [3] = 4,
@@ -102,7 +107,9 @@ void hybrid_init(size_t size)
   virgin_atom = xmalloc(size);
   virgin_atom_real = xmalloc(size);
   virgin_edge = xmalloc(size);
+  virgin_missed = xmalloc(size);
   memset(virgin_atom, 0xff, size);
+  memset(virgin_missed, 0xff, size);
   memset(virgin_atom_real, 0xff, size);
   memset(virgin_edge, 0xff, size);
 
@@ -120,16 +127,79 @@ static void classify(unsigned char *dst, const unsigned char *src)
   for (size_t i = 0; i < map_size; i++) dst[i] = count_class[src[i]];
 }
 
+/* Upstream hash.h's hash32() (AFL 2.52b's MurmurHash3 variant) and its
+ * HASH_CONST, under the same #ifdef: the 32-bit variant on the A53 */
+#define HASH_CONST 0xa5b35705
+
+#ifdef __x86_64__
+
+#define ROL64(_x, _r) ((((uint64_t)(_x)) << (_r)) | (((uint64_t)(_x)) >> (64 - (_r))))
+
+static inline uint32_t hash32(const void *key, uint32_t len, uint32_t seed)
+{
+  const uint64_t *data = (const uint64_t *)key;
+  uint64_t h1 = seed ^ len;
+
+  len >>= 3;
+
+  while (len--) {
+    uint64_t k1 = *data++;
+
+    k1 *= 0x87c37b91114253d5ULL;
+    k1 = ROL64(k1, 31);
+    k1 *= 0x4cf5ad432745937fULL;
+
+    h1 ^= k1;
+    h1 = ROL64(h1, 27);
+    h1 = h1 * 5 + 0x52dce729;
+  }
+
+  h1 ^= h1 >> 33;
+  h1 *= 0xff51afd7ed558ccdULL;
+  h1 ^= h1 >> 33;
+  h1 *= 0xc4ceb9fe1a85ec53ULL;
+  h1 ^= h1 >> 33;
+
+  return h1;
+}
+
+#else
+
+#define ROL32(_x, _r) ((((uint32_t)(_x)) << (_r)) | (((uint32_t)(_x)) >> (32 - (_r))))
+
+static inline uint32_t hash32(const void *key, uint32_t len, uint32_t seed)
+{
+  const uint32_t *data = (const uint32_t *)key;
+  uint32_t h1 = seed ^ len;
+
+  len >>= 2;
+
+  while (len--) {
+    uint32_t k1 = *data++;
+
+    k1 *= 0xcc9e2d51;
+    k1 = ROL32(k1, 15);
+    k1 *= 0x1b873593;
+
+    h1 ^= k1;
+    h1 = ROL32(h1, 13);
+    h1 = h1 * 5 + 0xe6546b64;
+  }
+
+  h1 ^= h1 >> 16;
+  h1 *= 0x85ebca6b;
+  h1 ^= h1 >> 13;
+  h1 *= 0xc2b2ae35;
+  h1 ^= h1 >> 16;
+
+  return h1;
+}
+
+#endif /* ^__x86_64__ */
+
 static uint32_t checksum(const unsigned char *map)
 {
-  uint64_t h = 0xcbf29ce484222325ULL;
-  const uint64_t *w = (const uint64_t *)map;
-
-  for (size_t i = 0; i < map_size / 8; i++) {
-    h ^= w[i];
-    h *= 0x100000001b3ULL;
-  }
-  return (uint32_t)(h ^ (h >> 32));
+  return hash32(map, map_size, HASH_CONST);
 }
 
 /* AFL's has_new_bits(): 2 for a new tuple, 1 for a new hit count, 0 else */
@@ -141,6 +211,20 @@ static int has_new_bits(unsigned char *virgin, const unsigned char *cls)
     if (cls[i] & virgin[i]) {
       ret = (virgin[i] == 0xff) ? 2 : (ret > 1 ? ret : 1);
       virgin[i] &= ~cls[i];
+    }
+  }
+  return ret;
+}
+
+/* has_new_bits() that leaves virgin as it is */
+static int peek_new_bits(const unsigned char *virgin, const unsigned char *cls)
+{
+  int ret = 0;
+
+  for (size_t i = 0; i < map_size; i++) {
+    if (cls[i] & virgin[i]) {
+      if (virgin[i] == 0xff) return 2;
+      ret = 1;
     }
   }
   return ret;
@@ -242,17 +326,21 @@ hybrid_verdict_t hybrid_after_path(unsigned char *map, int overflowed,
   path_execs++;
   purge_check();
 
+  /* Upstream's run_target() hashes the raw counts, before classify_counts() */
+  cksum = checksum(map);
   classify(path_cls, map);
-  cksum = checksum(path_cls);
 
+  last_filtered = 0;
   if (atom_check_up[cksum >> 16] && atom_check_down[cksum & 0xffff]) {
     n_filtered++;
+    last_filtered = 1;
     discard(map, cksum, input_key);
     report();
     return HYBRID_DISCARD;
   }
 
   if (!has_new_bits(virgin_atom, path_cls)) {
+    n_old_path++;
     discard(map, cksum, input_key);
     report();
     return HYBRID_DISCARD;
@@ -274,9 +362,12 @@ void hybrid_after_confirm(const unsigned char *map, int overflowed)
 
   classify(edge_cls, map);
 
-  if (has_new_bits(virgin_edge, edge_cls)) {
+  int new_bits = has_new_bits(virgin_edge, edge_cls);
+
+  if (new_bits) {
     has_new_bits(virgin_atom_real, path_kept);
     n_new_edges++;
+    if (new_bits == 2) n_new_tuples++;
   } else {
     atom_check_up[path_kept_cksum >> 16] = 1;
     atom_check_down[path_kept_cksum & 0xffff] = 1;
@@ -291,4 +382,61 @@ void hybrid_after_confirm(const unsigned char *map, int overflowed)
     cache[slot].cksum = path_kept_cksum;
     remember_input(path_kept_input, map);
   }
+}
+
+void hybrid_after_sample(const unsigned char *map, int overflowed)
+{
+  int new_bits;
+
+  if (overflowed) {
+    n_sample_overflow++;
+    return;
+  }
+  n_sampled++;
+
+  classify(edge_cls, map);
+  new_bits = peek_new_bits(virgin_edge, edge_cls);
+  if (new_bits) {
+    n_sample_new++;
+    if (new_bits == 2) n_sample_new_tuples++;
+    if (last_filtered) n_sample_new_filtered++;
+  }
+  has_new_bits(virgin_missed, edge_cls);
+}
+
+/* Tuples some sampled discard reached that no confirm has shown AFL++ yet */
+static unsigned long long count_missed_tuples(void)
+{
+  unsigned long long n = 0;
+
+  for (size_t i = 0; i < map_size; i++)
+    n += virgin_missed[i] != 0xff && virgin_edge[i] == 0xff;
+  return n;
+}
+
+void hybrid_write_stats(FILE *fp)
+{
+  fprintf(fp,
+          "hybrid_path_execs  : %llu\n"
+          "hybrid_filtered    : %llu\n"
+          "hybrid_old_path    : %llu\n"
+          "hybrid_confirmed   : %llu\n"
+          "hybrid_new_edges   : %llu\n"
+          "hybrid_new_tuples  : %llu\n"
+          "hybrid_input_hits  : %llu\n"
+          "hybrid_cache_hits  : %llu\n"
+          "hybrid_empty       : %llu\n"
+          "hybrid_purges      : %llu/%llu\n",
+          path_execs, n_filtered, n_old_path, n_confirmed, n_new_edges, n_new_tuples,
+          n_input_hits, n_cache_hits, n_empty, purge_real, purge_attempt);
+  if (!n_sampled && !n_sample_overflow) return;
+  fprintf(fp,
+          "sample_execs       : %llu\n"
+          "sample_overflow    : %llu\n"
+          "sample_new_edges   : %llu\n"
+          "sample_new_tuples  : %llu\n"
+          "sample_new_filtered: %llu\n"
+          "sample_missed_tuples: %llu\n",
+          n_sampled, n_sample_overflow, n_sample_new, n_sample_new_tuples,
+          n_sample_new_filtered, count_missed_tuples());
 }

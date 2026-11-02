@@ -13,6 +13,7 @@
 #define CS_TRACE_HYBRID_H
 
 #include <stddef.h>
+#include <stdio.h>
 #include <stdint.h>
 
 typedef enum {
@@ -32,5 +33,17 @@ hybrid_verdict_t hybrid_after_path(unsigned char *map, int overflowed,
 
 /* After the edge (branch-broadcast) pass; the map is left as decoded */
 void hybrid_after_confirm(const unsigned char *map, int overflowed);
+
+/* After a discarded input is re-run with branch broadcast (AFLCS_HYBRID_SAMPLE):
+ * counts whether its edge map had bits AFL++ has not been shown. Changes no
+ * state the hybrid verdicts read. */
+void hybrid_after_sample(const unsigned char *map, int overflowed);
+
+/* Path/edge pass counters, appended to AFLCS_STATS_FILE. hybrid_new_edges
+ * counts confirms whose edge map had new bits, hybrid_new_tuples those with a
+ * new edge rather than only a new hit count. The sample_* lines, when
+ * sampling is on, are the same counts for sampled discards;
+ * sample_missed_tuples is the tuples only sampled discards have reached. */
+void hybrid_write_stats(FILE *fp);
 
 #endif /* CS_TRACE_HYBRID_H */

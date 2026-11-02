@@ -55,6 +55,16 @@ u32 exec_count = 0;
 static unsigned long long total_exec_count = 0;
 static unsigned long long overflow_exec_count = 0;
 
+/* TODO: Remove extern variables. */
+extern int udmabuf_num;
+extern bool decoding_on;
+extern unsigned char *trace_bitmap;
+extern unsigned int trace_bitmap_size;
+extern cov_type_t cov_type;
+#ifdef AFLCS_STALKER_DECODER
+extern int trace_cpu;
+#endif
+
 /* AFLCS_STATS_FILE=PATH: keep the exec and overflow counts in PATH, rewritten
  * every STATS_PERIOD execs (the proxy is killed, not asked to exit). */
 #define STATS_PERIOD 256
@@ -67,6 +77,9 @@ static void write_stats(const char *path)
   if ((fp = fopen(tmp, "w")) == NULL) return;
   fprintf(fp, "execs           : %llu\noverflow_execs  : %llu\noverflow_packets: %lu\n",
           total_exec_count, overflow_exec_count, trace_overflow_packets());
+#ifdef AFLCS_STALKER_DECODER
+  if (cov_type == hybrid_cov) hybrid_write_stats(fp);
+#endif
   fclose(fp);
   rename(tmp, path);
 }
@@ -84,17 +97,15 @@ static int needs_bb_enable = 1;
  * contents. afl-fuzz writes it to .cur_input, passed as @@ or as stdin. */
 static const char *input_path;
 static int input_on_stdin;
+
+/* AFLCS_HYBRID_SAMPLE=N: re-run every Nth discarded input with branch
+ * broadcast to count the new edges hybrid's verdict hides from AFL++. A
+ * measurement: it costs execs and changes nothing AFL++ sees. 0 is off. */
+static unsigned long hybrid_sample;
+static unsigned long long hybrid_discards;
+static unsigned char *sample_saved_map;
 #endif /* AFLCS_STALKER_DECODER */
 
-/* TODO: Remove extern variables. */
-extern int udmabuf_num;
-extern bool decoding_on;
-extern unsigned char *trace_bitmap;
-extern unsigned int trace_bitmap_size;
-extern cov_type_t cov_type;
-#ifdef AFLCS_STALKER_DECODER
-extern int trace_cpu;
-#endif
 char *ld_forksrv_path;
 
 #ifdef AFLCS_STALKER_DECODER
@@ -461,6 +472,31 @@ static int confirm_with_branch_broadcast(void)
 
   return trace_set_bb_mode(0);
 }
+
+/* AFLCS_HYBRID_SAMPLE: the same edge pass on a discarded input, then the map
+ * hybrid_after_path() chose is put back for AFL++ */
+static int sample_with_branch_broadcast(void)
+{
+  int overflowed;
+
+  if (!sample_saved_map && !(sample_saved_map = malloc(trace_bitmap_size))) return -1;
+  memcpy(sample_saved_map, trace_bitmap, trace_bitmap_size);
+
+  if (trace_set_bb_mode(1) < 0) return -1;
+  if (retry_child(FREQ_MODE_ADDR) < 0) return -1;
+  if (wait_for_child_and_stop_trace(NULL) < 0) return -1;
+  freq_gov_restore_max();
+
+  overflowed = trace_did_overflow();
+  total_exec_count++;
+  if (overflowed) overflow_exec_count++;
+  freq_gov_on_result(FREQ_MODE_ADDR, overflowed);
+
+  hybrid_after_sample(trace_bitmap, overflowed);
+  memcpy(trace_bitmap, sample_saved_map, trace_bitmap_size);
+
+  return trace_set_bb_mode(0);
+}
 #endif /* AFLCS_STALKER_DECODER */
 
 static u32 __afl_next_testcase(void)
@@ -638,6 +674,7 @@ int main(int argc, char *argv[])
       cov_type = hybrid_cov;
 #ifdef AFLCS_STALKER_DECODER
       if (argvp) find_input(argvp);
+      if ((ptr = getenv("AFLCS_HYBRID_SAMPLE")) != NULL) hybrid_sample = strtoul(ptr, NULL, 10);
 #endif
     } else {
       FATAL("Error: unknown coverage type '%s'", ptr);
@@ -704,9 +741,12 @@ int main(int argc, char *argv[])
 
     /* Hybrid: a crash or timeout keeps its path map, as upstream only runs the
      * path/edge logic on fault == crash_mode */
-    if (cov_type == hybrid_cov && decoding_on && !WIFSIGNALED(status) &&
-        hybrid_after_path(trace_bitmap, overflowed, input_key()) == HYBRID_CONFIRM) {
-      if (confirm_with_branch_broadcast() < 0) return -1;
+    if (cov_type == hybrid_cov && decoding_on && !WIFSIGNALED(status)) {
+      if (hybrid_after_path(trace_bitmap, overflowed, input_key()) == HYBRID_CONFIRM) {
+        if (confirm_with_branch_broadcast() < 0) return -1;
+      } else if (hybrid_sample && ++hybrid_discards % hybrid_sample == 0) {
+        if (sample_with_branch_broadcast() < 0) return -1;
+      }
     }
 #else
     if (wait_for_child_and_stop_trace(&status) < 0) return -1;
