@@ -13,6 +13,7 @@
 #define CS_TRACE_HYBRID_H
 
 #include <stddef.h>
+#include <stdint.h>
 
 typedef enum {
   HYBRID_DISCARD = 0, /* no new path: AFL++ must see no new edges */
@@ -21,10 +22,13 @@ typedef enum {
 
 void hybrid_init(size_t map_size);
 
-/* After the path pass. On HYBRID_DISCARD the map has been replaced with the
- * edge map last confirmed for this path, or zeroed if there is none. On
- * HYBRID_CONFIRM the path map is kept aside for hybrid_after_confirm(). */
-hybrid_verdict_t hybrid_after_path(unsigned char *map, int overflowed);
+/* After the path pass. input_key identifies the test case's contents, 0 when
+ * unknown. On HYBRID_DISCARD the map has been replaced with the edge map first
+ * shown for this input, else the one last confirmed for this path, else
+ * zeroed. On HYBRID_CONFIRM the path map is kept aside for
+ * hybrid_after_confirm(). */
+hybrid_verdict_t hybrid_after_path(unsigned char *map, int overflowed,
+                                   uint64_t input_key);
 
 /* After the edge (branch-broadcast) pass; the map is left as decoded */
 void hybrid_after_confirm(const unsigned char *map, int overflowed);

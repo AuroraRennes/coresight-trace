@@ -33,6 +33,7 @@
 #include <sys/shm.h>
 #include <sys/wait.h>
 #include <sys/types.h>
+#include <sys/stat.h>
 #include <sys/ptrace.h>
 #include <fcntl.h>
 
@@ -78,6 +79,11 @@ static int needs_calibration = 1;
 /* Enable ETM branch broadcast once, on the first testcase, when AFLCS_COV=edge.
  * Independent of the calibration above. */
 static int needs_bb_enable = 1;
+
+/* Hybrid: where the test case is, to key the edge map AFL++ is shown on its
+ * contents. afl-fuzz writes it to .cur_input, passed as @@ or as stdin. */
+static const char *input_path;
+static int input_on_stdin;
 #endif /* AFLCS_STALKER_DECODER */
 
 /* TODO: Remove extern variables. */
@@ -387,6 +393,53 @@ static s32 retry_child(freq_mode_t mode)
   return pid;
 }
 
+/* Hybrid: find the test case afl-fuzz passes, as @@ or on stdin */
+static void find_input(char **argvp)
+{
+  struct stat st;
+
+  for (; *argvp; argvp++) {
+    size_t n = strlen(*argvp);
+    if (n >= 10 && !strcmp(*argvp + n - 10, ".cur_input")) {
+      input_path = *argvp;
+      return;
+    }
+  }
+  input_on_stdin = !fstat(0, &st) && S_ISREG(st.st_mode);
+  if (!input_on_stdin) WARNF("hybrid: test case not found, no per-input map");
+}
+
+/* FNV-1a of the test case, 0 when it cannot be read */
+static uint64_t input_key(void)
+{
+  static unsigned char buf[65536];
+  uint64_t h = 0xcbf29ce484222325ULL;
+  off_t off = 0;
+  ssize_t n;
+  int fd;
+
+  if (input_path) {
+    if ((fd = open(input_path, O_RDONLY)) < 0) return 0;
+  } else if (input_on_stdin) {
+    fd = 0;
+  } else {
+    return 0;
+  }
+
+  while ((n = pread(fd, buf, sizeof(buf), off)) > 0) {
+    for (ssize_t i = 0; i < n; i++) {
+      h ^= buf[i];
+      h *= 0x100000001b3ULL;
+    }
+    off += n;
+  }
+  if (fd) close(fd);
+  if (n < 0) return 0;
+
+  h ^= (uint64_t)off;
+  return h ? h : 1;
+}
+
 /* Hybrid's second pass: re-run the input once with branch broadcast at the
  * addr pass's frequency, with no overflow retry, as upstream's
  * save_if_interesting(). The path pass's status stays the one reported. */
@@ -583,6 +636,9 @@ int main(int argc, char *argv[])
       FATAL("AFLCS_COV=hybrid needs the Stalker backend (STALKER_DECODER=1)");
 #endif
       cov_type = hybrid_cov;
+#ifdef AFLCS_STALKER_DECODER
+      if (argvp) find_input(argvp);
+#endif
     } else {
       FATAL("Error: unknown coverage type '%s'", ptr);
     }
@@ -649,7 +705,7 @@ int main(int argc, char *argv[])
     /* Hybrid: a crash or timeout keeps its path map, as upstream only runs the
      * path/edge logic on fault == crash_mode */
     if (cov_type == hybrid_cov && decoding_on && !WIFSIGNALED(status) &&
-        hybrid_after_path(trace_bitmap, overflowed) == HYBRID_CONFIRM) {
+        hybrid_after_path(trace_bitmap, overflowed, input_key()) == HYBRID_CONFIRM) {
       if (confirm_with_branch_broadcast() < 0) return -1;
     }
 #else

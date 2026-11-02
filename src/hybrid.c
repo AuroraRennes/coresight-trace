@@ -9,9 +9,14 @@
  *
  * Differences from upstream, all forced by AFL++ being unmodified:
  * - A discarded input cannot be dropped, AFL++ always reads a map. It gets the
- *   edge map last confirmed for the same path, or an empty map. Either adds no
- *   new edges, and the cached map keeps AFL++'s calibration and trimming of
- *   queue entries stable (a path determines its edges).
+ *   edge map last confirmed for the same path, which adds no new edges and
+ *   keeps AFL++'s calibration and trimming of queue entries stable (a path
+ *   determines its edges). An input AFL++ has already been shown a map for
+ *   gets that map again: a nondeterministic target re-run on one input
+ *   (calibration) can take a path never confirmed, and an empty map there
+ *   makes calibrate_case() abort with NOINST or mark the whole trace as
+ *   variable. Otherwise (a fresh input whose path adds no bits) the map is
+ *   empty, which is upstream's verdict without its edge pass.
  * - Calibration runs every exec in path mode, with the edge pass on
  *   the first; upstream ran half the calibration execs in each mode.
  * - purge_atom_coverage()'s exec counter counts every exec: the proxy cannot
@@ -38,12 +43,17 @@
  * what to show AFL++ for a discarded input, never whether to confirm. */
 #define CACHE_SLOTS 256
 
+/* Input key -> edge map first shown to AFL++ for it. Calibration re-runs an
+ * input back to back, so a few slots are enough. */
+#define INPUT_SLOTS 64
+
 static size_t map_size;
 
 static unsigned char *virgin_atom, *virgin_atom_real, *virgin_edge;
 static unsigned char *path_cls, *path_kept, *edge_cls;
 static uint32_t path_kept_cksum;
 static int path_kept_overflow;
+static uint64_t path_kept_input;
 
 /* Upstream atom_check_up/down: a checksum is filtered once both of its halves
  * have been marked, i.e. a crude two-table Bloom filter */
@@ -54,6 +64,11 @@ static struct {
   unsigned char *map;
 } cache[CACHE_SLOTS];
 
+static struct {
+  uint64_t key;
+  unsigned char *map;
+} inputs[INPUT_SLOTS];
+
 static unsigned long long real_execs, path_execs, queued_atom_paths;
 static unsigned long long pre_real_execs, pre_virgin_bits;
 static unsigned long long purge_interval = PURGE_INTERVAL_LEVEL1;
@@ -62,6 +77,7 @@ static unsigned long long purge_attempt, purge_real;
 /* AFLCS_STALKER_DIAG */
 static int diag;
 static unsigned long long n_filtered, n_confirmed, n_new_edges, n_cache_hits;
+static unsigned long long n_input_hits, n_empty;
 
 static const unsigned char count_class[256] = {
   [0] = 0, [1] = 1, [2] = 2, [3] = 4,
@@ -182,24 +198,44 @@ static void report(void)
 
   fprintf(stderr,
           "[HYBRID] path=%llu filtered=%llu confirmed=%llu new_edges=%llu "
-          "cache_hits=%llu purges=%llu/%llu\n",
+          "cache_hits=%llu input_hits=%llu empty=%llu purges=%llu/%llu\n",
           path_execs, n_filtered, n_confirmed, n_new_edges, n_cache_hits,
-          purge_real, purge_attempt);
+          n_input_hits, n_empty, purge_real, purge_attempt);
 }
 
-static void discard(unsigned char *map, uint32_t cksum)
+/* Remember the map AFL++ is shown for this input, unless one already is */
+static void remember_input(uint64_t key, const unsigned char *map)
+{
+  unsigned int slot = key % INPUT_SLOTS;
+
+  if (!key || (inputs[slot].map && inputs[slot].key == key)) return;
+  if (!inputs[slot].map) inputs[slot].map = xmalloc(map_size);
+  memcpy(inputs[slot].map, map, map_size);
+  inputs[slot].key = key;
+}
+
+/* Show AFL++ the edge map it was shown for this input, so re-runs of one input
+ * read the same map whatever path they take, or the one cached for this path */
+static void discard(unsigned char *map, uint32_t cksum, uint64_t key)
 {
   unsigned int slot = cksum % CACHE_SLOTS;
+  unsigned int islot = key % INPUT_SLOTS;
 
-  if (cache[slot].map && cache[slot].cksum == cksum) {
+  if (key && inputs[islot].map && inputs[islot].key == key) {
+    memcpy(map, inputs[islot].map, map_size);
+    n_input_hits++;
+  } else if (cache[slot].map && cache[slot].cksum == cksum) {
     memcpy(map, cache[slot].map, map_size);
+    remember_input(key, map);
     n_cache_hits++;
   } else {
     memset(map, 0, map_size);
+    n_empty++;
   }
 }
 
-hybrid_verdict_t hybrid_after_path(unsigned char *map, int overflowed)
+hybrid_verdict_t hybrid_after_path(unsigned char *map, int overflowed,
+                                   uint64_t input_key)
 {
   uint32_t cksum;
 
@@ -211,13 +247,13 @@ hybrid_verdict_t hybrid_after_path(unsigned char *map, int overflowed)
 
   if (atom_check_up[cksum >> 16] && atom_check_down[cksum & 0xffff]) {
     n_filtered++;
-    discard(map, cksum);
+    discard(map, cksum, input_key);
     report();
     return HYBRID_DISCARD;
   }
 
   if (!has_new_bits(virgin_atom, path_cls)) {
-    discard(map, cksum);
+    discard(map, cksum, input_key);
     report();
     return HYBRID_DISCARD;
   }
@@ -226,6 +262,7 @@ hybrid_verdict_t hybrid_after_path(unsigned char *map, int overflowed)
   memcpy(path_kept, path_cls, map_size);
   path_kept_cksum = cksum;
   path_kept_overflow = overflowed;
+  path_kept_input = input_key;
   n_confirmed++;
   report();
   return HYBRID_CONFIRM;
@@ -252,5 +289,6 @@ void hybrid_after_confirm(const unsigned char *map, int overflowed)
     if (!cache[slot].map) cache[slot].map = xmalloc(map_size);
     memcpy(cache[slot].map, map, map_size);
     cache[slot].cksum = path_kept_cksum;
+    remember_input(path_kept_input, map);
   }
 }
